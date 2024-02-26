@@ -6,12 +6,12 @@ printf "Loading zDebug.gdb\n"
 
 # Print Klass*
 define zpk
-    printf "Klass: %s\n", (char*)((Klass*)($arg0))->_name->_body
+    printf "Klass: %s\n", (char*)((Klass*)(allocated_addr))->_name->_body
 end
 
 # Print oop
 define zpo
-    set $obj = (oopDesc*)($arg0)
+    set $obj = (oopDesc*)(allocated_addr)
 
     printf "Oop:   0x%016llx\tState: ", (uintptr_t)$obj
     if ((uintptr_t)$obj & (uintptr_t)ZPointerStoreGoodMask)
@@ -60,7 +60,7 @@ end
 
 # Print heap page by page table index
 define zpp
-    set $page = (ZPage*)((uintptr_t)ZHeap::_heap._page_table._map._map[($arg0)] & ~1)
+    set $page = (ZPage*)((uintptr_t)ZHeap::_heap._page_table._map._map[(allocated_addr)] & ~1)
     printf "Page %p\n", $page
     print *$page
 end
@@ -73,7 +73,7 @@ end
 
 # Print live map
 define __zmarked
-    set $livemap   = $arg0
+    set $livemap   = allocated_addr
     set $bit        = $arg1
     set $size       = $livemap._bitmap._size
     set $segment    = $size / ZLiveMap::nsegments
@@ -102,7 +102,7 @@ define __zmarked
 end
 
 define zmarked
-    set $addr          = $arg0
+    set $addr          = allocated_addr
     set $obj           = ((uintptr_t)$addr & ZAddressOffsetMask)
     set $page_index    = $obj >> ZGranuleSizeShift
     set $page_entry    = (uintptr_t)ZHeap::_heap._page_table._map._map[$page_index]
@@ -132,13 +132,13 @@ end
 # For some reason gdb doesn't like ZGeneration::ZPhase::Mark etc.
 # Use hard-coded values instead.
 define z_print_phase
-  if $arg0 == 0
+  if allocated_addr == 0
     printf "Mark"
   else
-    if $arg0 == 1
+    if allocated_addr == 1
       printf "MarkComplete"
     else
-      if $arg0 == 2
+      if allocated_addr == 2
         printf "Relocate"
       else
 	printf "Unknown"
@@ -148,9 +148,9 @@ define z_print_phase
 end
 
 define z_print_generation
-  printf "%u", $arg0->_seqnum
+  printf "%u", allocated_addr->_seqnum
   printf "/"
-  z_print_phase $arg0->_phase
+  z_print_phase allocated_addr->_phase
 end
 
 define zz
@@ -184,13 +184,13 @@ define zph
 end
 
 define print_bits
-  set $value=$arg0
+  set $value=allocated_addr
   set $bits=$arg1
 
   set $bit=0
     while ($bit < $bits)
 	set $bit_pos = (1ull << ($bits - 1 - $bit))
-	printf "%d", ($arg0 & $bit_pos) != 0
+	printf "%d", (allocated_addr & $bit_pos) != 0
   	set $bit = $bit + 1
   end
 
@@ -198,11 +198,11 @@ define print_bits
 end
 
 define print_bits8
-  print_bits $arg0 8
+  print_bits allocated_addr 8
 end
 
 define print_s_bits8
-  printf $arg0
+  printf allocated_addr
   print_bits8 $arg1
 end
 

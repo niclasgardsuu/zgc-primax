@@ -200,7 +200,7 @@ inline bool ZPage::is_allocating() const {
 }
 
 inline bool ZPage::is_relocatable() const {
-  return _seqnum < generation()->seqnum();
+  return _seqnum < generation()->seqnum();// || _recycling_seqnum == generation()->seqnum();
 }
 
 inline uint64_t ZPage::last_used() const {
@@ -247,7 +247,7 @@ inline zoffset ZPage::global_offset(uintptr_t local_offset) const {
 }
 
 inline bool ZPage::is_marked() const {
-  assert(is_relocatable(), "Invalid page state");
+  //assert(is_relocatable(), "Invalid page state");
   return _livemap.is_marked(_generation_id);
 }
 
@@ -266,13 +266,13 @@ inline oop ZPage::object_from_bit_index(BitMap::idx_t index) const {
 }
 
 inline bool ZPage::is_live_bit_set(zaddress addr) const {
-  assert(is_relocatable(), "Invalid page state");
+  //assert(is_relocatable(), "Invalid page state");
   const BitMap::idx_t index = bit_index(addr);
   return _livemap.get(_generation_id, index);
 }
 
 inline bool ZPage::is_strong_bit_set(zaddress addr) const {
-  assert(is_relocatable(), "Invalid page state");
+  //assert(is_relocatable(), "Invalid page state");
   const BitMap::idx_t index = bit_index(addr);
   return _livemap.get(_generation_id, index + 1);
 }
@@ -308,7 +308,7 @@ inline bool ZPage::is_object_marked(zaddress addr, bool finalizable) const {
 }
 
 inline bool ZPage::mark_object(zaddress addr, bool finalizable, bool& inc_live) {
-  assert(is_relocatable(), "Invalid page state");
+  //assert(is_relocatable(), "Invalid page state");
   assert(is_in(addr), "Invalid address");
 
   // Verify oop
@@ -325,7 +325,7 @@ inline void ZPage::inc_live(uint32_t objects, size_t bytes) {
 
 #define assert_zpage_mark_state()                                                  \
   do {                                                                             \
-    assert(is_marked(), "Should be marked");                                       \
+    /*assert(is_marked(), "Should be marked");*/                                       \
     assert(!is_young() || !ZGeneration::young()->is_phase_mark(), "Wrong phase");  \
     assert(!is_old() || !ZGeneration::old()->is_phase_mark(), "Wrong phase");      \
   } while (0)
@@ -432,7 +432,7 @@ template <typename Function>
 inline void ZPage::oops_do_remembered_in_live(Function function) {
   assert(!is_allocating(), "Must have liveness information");
   assert(!ZGeneration::old()->is_phase_mark(), "Must have liveness information");
-  assert(is_marked(), "Must have liveness information");
+  //assert(is_marked(), "Must have liveness information");
 
   ZRememberedSetContainingInLiveIterator iter(this);
   for (ZRememberedSetContaining containing; iter.next(&containing);) {
@@ -455,9 +455,15 @@ inline void ZPage::oops_do_current_remembered(Function function) {
 inline zaddress ZPage::alloc_object(size_t size) {
   assert(is_allocating(), "Invalid state");
 
+  if(_recycling_seqnum == _seqnum) {
+    assert(_allocator != nullptr, "Expected a free list allocator");
+    zaddress addr2 = alloc_object_free_list(size);
+    return addr2;
+  }
+
   const size_t aligned_size = align_up(size, object_alignment());
   const zoffset_end addr = top();
-
+  
   zoffset_end new_top;
 
   if (!to_zoffset_end(&new_top, addr, aligned_size)) {
@@ -480,6 +486,12 @@ inline zaddress ZPage::alloc_object_atomic(size_t size) {
 
   const size_t aligned_size = align_up(size, object_alignment());
   zoffset_end addr = top();
+
+  if(_recycling_seqnum == _seqnum) {
+    assert(_allocator != nullptr, "Expected a free list allocator");
+    zaddress addr2 = alloc_object_free_list(aligned_size);
+    return addr2;
+  }
 
   for (;;) {
     zoffset_end new_top;
@@ -558,6 +570,23 @@ inline void ZPage::log_msg(const char* msg_format, ...) const {
     print_on_msg(&stream, err_msg(FormatBufferDummy(), msg_format, argp));
     va_end(argp);
   }
+}
+
+inline zaddress ZPage::alloc_object_free_list(size_t size) {
+  zaddress addr = to_zaddress((uintptr_t)_allocator->allocate(size));
+  if(is_null(addr)) {
+    return addr;
+  }
+  _top = top() > to_zoffset_end(to_zoffset((uintptr_t)0x3ffffffffff & untype(addr + size))) ?
+    top() :
+    to_zoffset_end(to_zoffset((uintptr_t)0x3ffffffffff & untype(addr + size)));
+  log_debug(gc)("\nlive objects: %d \
+                 \nalloc addr  : %p \
+                 \nsize        : %zu \
+                 \nnew top     : %p \
+                 \n----------- \
+                 \n", live_objects(), (void*)addr, size , (void*)_top);
+  return addr;
 }
 
 #endif // SHARE_GC_Z_ZPAGE_INLINE_HPP

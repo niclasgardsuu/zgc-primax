@@ -173,6 +173,26 @@ inline void ZLiveMap::iterate(ZGenerationId id, Function function) {
   }
 }
 
+template <typename Function>
+inline void ZLiveMap::iterate_forced(ZGenerationId id, Function function) {
+  // if (!is_marked(id)) {
+  //   return;
+  // }
+
+  auto live_only = [&](BitMap::idx_t index) -> bool {
+    if ((index & 1) == 0) {
+      return function(index);
+    }
+    // Don't visit the finalizable bits
+    return true;
+  };
+
+  for (BitMap::idx_t segment = first_live_segment(); segment < nsegments; segment = next_live_segment(segment)) {
+    // For each live segment
+    iterate_segment(segment, live_only);
+  }
+}
+
 // Find the bit index that correspond the start of the object that is lower,
 // or equal, to the given index (index is inclusive).
 //

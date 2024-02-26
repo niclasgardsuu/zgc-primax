@@ -415,6 +415,32 @@ zaddress ZRelocate::forward_object(ZForwarding* forwarding, zaddress_unsafe from
   return to_addr;
 }
 
+static ZPage* revive_page(ZPage* target) {
+  if (ZStressRelocateInPlace) {
+    // Simulate failure to revive a new page. This will
+    // cause the page being relocated to be relocated in-place.
+    return nullptr;
+  }
+
+  if(target == nullptr) {
+    //there are no potential pages to revive
+    return nullptr;
+  }
+
+  ZAllocationFlags flags;     //??
+  flags.set_non_blocking();   //?? antar dom här ska va kvar?
+  flags.set_gc_relocation();  //??
+  
+  bool success = target->init_free_list();
+  if(success) {
+    target->reset_recycling_seqnum();
+    target->reset_seqnum(); //TODO kanske inte göra detta än? blir de kaos och kommer dom försöka alloca inuti den då? borde ksk hända när den går till nästa target.
+    return target;
+  }
+  //failed revive
+  return nullptr;
+}
+
 static ZPage* alloc_page(ZAllocatorForRelocation* allocator, ZPageType type, size_t size) {
   if (ZStressRelocateInPlace) {
     // Simulate failure to allocate a new page. This will
@@ -454,6 +480,22 @@ public:
   ZRelocateSmallAllocator(ZGeneration* generation)
     : _generation(generation),
       _in_place_count(0) {}
+
+
+  ZPage* revive_and_retire_target_page(ZForwarding* forwarding, ZPage* target) {
+    ZPage* page = revive_page(_generation->get_next_recyclable_page()); //TODO gör denna till const sen när jag inte vill ha den som nullptr <3
+    //också TODO: skicka inte in nullptr. de ska va pointern till target zpage
+    if(page != nullptr) {
+      page->print_live_addresses();
+    }
+
+    if (page != nullptr && target != nullptr) {
+      // Retire the old target page
+      retire_target_page(_generation, target);
+    }
+
+    return page;
+  }
 
   ZPage* alloc_and_retire_target_page(ZForwarding* forwarding, ZPage* target) {
     ZAllocatorForRelocation* const allocator = ZAllocator::relocation(forwarding->to_age());
@@ -523,6 +565,11 @@ public:
 
   void set_shared(ZPageAge age, ZPage* page) {
     _shared[static_cast<uint>(age) - 1] = page;
+  }
+
+  ZPage* revive_and_retire_target_page(ZForwarding* forwarding, ZPage* target) {
+    //alloc_and_retire_target_page(forwarding, target); //TODO implement for medium
+    return nullptr;
   }
 
   ZPage* alloc_and_retire_target_page(ZForwarding* forwarding, ZPage* target) {
@@ -623,6 +670,7 @@ private:
 
     const size_t size = ZUtils::object_size(from_addr);
     ZPage* const to_page = target(_forwarding->to_age());
+
 
     // Lookup forwarding
     {
@@ -893,11 +941,22 @@ private:
     assert(ZHeap::heap()->is_object_live(addr), "Should be live");
 
     while (!try_relocate_object(addr)) {
+      ZPage* to_page;
+      ZPageAge to_age;
+      // Revive an old page and use it as a target, if there are no
+      // old pages left to choose from, try allocating a new target page
+      to_age = _forwarding->to_age();
+      to_page = _allocator->revive_and_retire_target_page(_forwarding, target(to_age));
+      set_target(to_age, to_page);
+      if (to_page != nullptr && to_page->type() == ZPageType::small) { //TODO: implemented for medium pages as well
+        continue;
+      }
+
       // Allocate a new target page, or if that fails, use the page being
       // relocated as the new target, which will cause it to be relocated
       // in-place.
-      const ZPageAge to_age = _forwarding->to_age();
-      ZPage* to_page = _allocator->alloc_and_retire_target_page(_forwarding, target(to_age));
+      to_age = _forwarding->to_age();
+      to_page = _allocator->alloc_and_retire_target_page(_forwarding, target(to_age));
       set_target(to_age, to_page);
       if (to_page != nullptr) {
         continue;

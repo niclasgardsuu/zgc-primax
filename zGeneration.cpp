@@ -119,6 +119,7 @@ ZGeneration::ZGeneration(ZGenerationId id, ZPageTable* page_table, ZPageAllocato
     _mark(this, page_table),
     _relocate(this),
     _relocation_set(this),
+    _r_page_index(0),
     _freed(0),
     _promoted(0),
     _compacted(0),
@@ -1515,4 +1516,12 @@ uint ZGenerationOld::total_collections_at_start() const {
 
 ZGenerationTracer* ZGenerationOld::jfr_tracer() {
   return &_jfr_tracer;
+}
+
+ZPage* ZGeneration::get_next_recyclable_page() {
+  return _relocation_set.get_r_page(Atomic::fetch_then_add(&_r_page_index, 1u));
+}
+
+void ZGeneration::print_all_r_pages() {
+  _relocation_set.print_all_r_pages();
 }

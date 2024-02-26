@@ -69,6 +69,7 @@ protected:
   ZMark                 _mark;
   ZRelocate             _relocate;
   ZRelocationSet        _relocation_set;
+  size_t                _r_page_index;
 
   volatile size_t       _freed;
   volatile size_t       _promoted;
@@ -172,6 +173,9 @@ public:
 
   // Threads
   void threads_do(ThreadClosure* tc) const;
+
+  ZPage* get_next_recyclable_page();
+  void print_all_r_pages();
 };
 
 enum class ZYoungType {

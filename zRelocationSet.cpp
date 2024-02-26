@@ -166,6 +166,20 @@ void ZRelocationSet::install(const ZRelocationSetSelector* selector) {
   _forwardings = task.forwardings();
   _nforwardings = task.nforwardings();
 
+  //Copy the array of not selected pages.
+  ZArrayIterator<ZPage*> not_selected_small_iter(selector->not_selected_small());
+  ZArrayIterator<ZPage*> not_selected_medium_iter(selector->not_selected_medium());
+  _not_selected_small_size = 0;
+  _not_selected_medium_size = 0;
+  for (ZPage* r_page; not_selected_small_iter.next(&r_page);) {
+    _not_selected_small.append(r_page);
+    _not_selected_small_size++;
+  }
+  for (ZPage* r_page; not_selected_medium_iter.next(&r_page);) {
+    _not_selected_medium.append(r_page);
+    _not_selected_medium_size++;
+  }
+
   // Update statistics
   _generation->stat_relocation()->at_install_relocation_set(_allocator.size());
 }
@@ -204,4 +218,19 @@ void ZRelocationSet::register_in_place_relocate_promoted(ZPage* page) {
   ZLocker<ZLock> locker(&_promotion_lock);
   assert(!_in_place_relocate_promoted_pages.contains(page), "no duplicates allowed");
   _in_place_relocate_promoted_pages.append(page);
+}
+
+ZPage* ZRelocationSet::get_r_page(size_t index) {
+  if(index < _not_selected_small_size) {
+    return _not_selected_small.at(index);
+  } else {
+    return nullptr;
+  }
+}
+
+void ZRelocationSet::print_all_r_pages() {
+  ZArrayIterator<ZPage*> r_iter(&_not_selected_small);
+  for (ZPage* r_page; r_iter.next(&r_page);) {
+    log_debug(gc)("r_page: %p",(void*)r_page);
+  }
 }

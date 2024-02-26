@@ -92,6 +92,8 @@ public:
 
   template <typename Function>
   void iterate(ZGenerationId id, Function function);
+  template <typename Function>
+  void iterate_forced(ZGenerationId id, Function function);
 
   BitMap::idx_t find_base_bit(BitMap::idx_t index);
   BitMap::idx_t find_base_bit_in_segment(BitMap::idx_t start, BitMap::idx_t index);

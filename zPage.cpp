@@ -32,6 +32,10 @@
 #include "utilities/align.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/growableArray.hpp"
+#include <string>
+#include <sstream>
+
+#define MINIMUM_DISTANCE_BETWEEN_OBJECTS_TO_CONSIDER_FREEING_RANGE_BETWEEN_THEM__LONG_NAME__I_KNOW___ILL_CHANGE_IT_LATER 1024
 
 ZPage::ZPage(ZPageType type, const ZVirtualMemory& vmem, const ZPhysicalMemory& pmem)
   : _type(type),
@@ -46,7 +50,9 @@ ZPage::ZPage(ZPageType type, const ZVirtualMemory& vmem, const ZPhysicalMemory& 
     _remembered_set(),
     _last_used(0),
     _physical(pmem),
-    _node() {
+    _node(),
+    _allocator(nullptr),
+    _recycling_seqnum(-1) {
   assert(!_virtual.is_null(), "Should not be null");
   assert(!_physical.is_null(), "Should not be null");
   assert(_virtual.size() == _physical.size(), "Virtual/Physical size mismatch");
@@ -314,4 +320,118 @@ void ZPage::fatal_msg(const char* msg) const {
   stringStream ss;
   print_on_msg(&ss, msg);
   fatal("%s", ss.base());
+}
+
+bool ZPage::init_free_list() {
+  // log_debug(gc)("START INITIALIZING FREE LIST %p",(void*)start());
+  if(_allocator){
+    //reset the current allocator, and mark entire page as allocated
+    _allocator->reset();
+  } else {
+    allocation_size_func size_func = [](void* addr){
+      if(oopDesc::is_oop(cast_to_oop(to_zaddress((uintptr_t)addr)))) {
+        return ZUtils::object_size(to_zaddress((uintptr_t) addr)); 
+      } else {
+        return (size_t)0;
+      }
+    };
+    _allocator = new AllocatorWrapper<ZBuddyAllocator>((void*)ZOffset::address(start()), size(), size_func, 0, true);
+  }
+  
+  if(_age == ZPageAge::old) {
+    log_debug(gc)("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOLD PAGE FOUND init");
+    return false;
+  } else {
+    // log_debug(gc)("young");
+  }
+
+  if(live_objects() <= 0) {
+    // log_debug(gc)("WTFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
+    _recycling_seqnum -= 1; 
+    _top = to_zoffset_end(start());
+    return false;
+  }
+
+  //Reconstruct the free list from the livemap
+  //
+  //Resetting a free list allocator assumes allocating all the
+  //space available, and we are reconstructing it by freeing the
+  //spaces inbetween live objects.
+  uintptr_t curr = untype(ZOffset::address(start()));
+  auto free_internal_range = [&](BitMap::idx_t index) -> bool {
+    zaddress allocated_addr = ZOffset::address(offset_from_bit_index(index));
+    uintptr_t allocated_addr_p = untype(allocated_addr);
+    
+    if(allocated_addr_p - curr > MINIMUM_DISTANCE_BETWEEN_OBJECTS_TO_CONSIDER_FREEING_RANGE_BETWEEN_THEM__LONG_NAME__I_KNOW___ILL_CHANGE_IT_LATER) {
+      log_debug(gc)("initadr2 : %p\ninitsiz2 : %zu", (void*)curr, allocated_addr_p - curr);
+      _allocator->free_range((void*)curr,allocated_addr_p - curr);
+    } else if(allocated_addr_p - curr > 0) {
+      log_debug(gc)("initadr : %p\ninitsiz : %zu", (void*)curr, allocated_addr_p - curr);
+    }
+    
+    //Jump to beginning of next free block
+    size_t allocated_size = align_up(ZUtils::object_size(allocated_addr), object_alignment());
+    curr = allocated_addr_p + allocated_size;
+    return true;
+  };
+
+  _livemap.iterate_forced(_generation_id, free_internal_range);
+  //free final block after last object
+  _allocator->free_range((void*)curr, (uintptr_t)ZOffset::address(to_zoffset(end()))-curr); 
+  log_debug(gc)("initadr : %p\ninitsiz : %zu", (void*)curr, untype(ZOffset::address(to_zoffset(end())))-curr);
+  // log_debug(gc)("FINISHED FREE LIST INITIALIZATION %p",(void*)start());
+  return true;
+}
+
+// void ZPage::allocate_object_in_free_list(size_t size, uint32_t gc_cycle) {
+//   if(!_allocator || generation()->seqnum() != _seqnum) {
+//     //this is the first time relocation tries to use the free list
+//     //allocator
+//     // OR
+//     //this is the first time during this cycle of relocation that
+//     //someone uses this page as a to_page, therefore we have to 
+//     //initialize the free list allocator
+//     _seqnum = generation()->seqnum(); //TODO kommer detta förstöra nåt med concurrency?
+//     init_free_list_allocator(size);
+//   }
+//   uintptr_t addr = _free_list_allocator.allocate(); //TODO ska den va i zaddress space så måste den convertas
+//   _top = max(top, addr+size);
+//   return addr;
+// }
+
+void ZPage::reset_recycling_seqnum() {
+  //TODO kom på va som händer om flera threads försöker recyclea samma page.
+  //just nu kan de inte hända, men i framtiden om ja får till concurrency.
+
+  //också, se till att på nåt sätt sätta bump pointer på nåt konstigt ställa så att 
+  //inga vanliga allocations kan göras. Men vet inte än hur ja ska göra för o 
+  //skilja recycle allocation och vanlig allocation.
+  _recycling_seqnum = generation()->seqnum();
+}
+
+void ZPage::print_live_addresses() {
+  int age = 1;
+  if(_age == ZPageAge::old) {
+    age = 2;
+    // log_debug(gc)("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOLD PAGE FOUND");
+  }
+  // log_debug(gc)("seqnum-age: %d-%d", _seqnum,age);
+  // log_debug(gc)("start     : %p",(void*)(start()));
+  // log_debug(gc)("top       : %p", (void*)(top()));
+  // log_debug(gc)("end       : %p",(void*)(end()));
+  // int* a = (int*)_allocator->allocate(64);
+  // int* b = (int*)_allocator->allocate(1);
+  // int* c = (int*)_allocator->allocate(64);
+  // _allocator->free(b);
+  auto do_bit = [&](BitMap::idx_t index) -> bool {
+    zoffset offset = offset_from_bit_index(index);
+    const zaddress to_addr = ZOffset::address(offset);
+    const size_t size = ZUtils::object_size(to_addr);
+
+    log_debug(gc)("livealocc  : %p\nlivesizze  : %lu", (void*)offset, size);
+    
+    return true;
+  };
+  _livemap.iterate_forced(_generation_id, do_bit);
+  log_debug(gc)("Done Printing Live Addresses");
 }

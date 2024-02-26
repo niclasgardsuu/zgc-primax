@@ -39,13 +39,17 @@ class ZRelocationSet {
   template <bool> friend class ZRelocationSetIteratorImpl;
 
 private:
-  ZGeneration*         _generation;
-  ZForwardingAllocator _allocator;
-  ZForwarding**        _forwardings;
-  size_t               _nforwardings;
-  ZLock                _promotion_lock;
-  ZArray<ZPage*>       _flip_promoted_pages;
-  ZArray<ZPage*>       _in_place_relocate_promoted_pages;
+  ZGeneration*          _generation;
+  ZForwardingAllocator  _allocator;
+  ZForwarding**         _forwardings;
+  size_t                _nforwardings;
+  ZLock                 _promotion_lock;
+  ZArray<ZPage*>        _flip_promoted_pages;
+  ZArray<ZPage*>        _in_place_relocate_promoted_pages;
+  ZArray<ZPage*>        _not_selected_small;
+  ZArray<ZPage*>        _not_selected_medium;
+  size_t                _not_selected_small_size;
+  size_t                _not_selected_medium_size;
 
   ZWorkers* workers() const;
 
@@ -59,6 +63,9 @@ public:
 
   void register_flip_promoted(const ZArray<ZPage*>& pages);
   void register_in_place_relocate_promoted(ZPage* page);
+
+  ZPage* get_r_page(size_t index);
+  void print_all_r_pages();
 };
 
 template <bool Parallel>

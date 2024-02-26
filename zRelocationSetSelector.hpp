@@ -142,6 +142,7 @@ public:
   const ZArray<ZPage*>* not_selected_small() const;
   const ZArray<ZPage*>* not_selected_medium() const;
   const ZArray<ZPage*>* not_selected_large() const;
+
   size_t forwarding_entries() const;
 
   ZRelocationSetSelectorStats stats() const;

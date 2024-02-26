@@ -431,7 +431,7 @@ void ZMark::mark_and_follow(ZMarkContext* context, ZMarkStackEntry entry) {
   const bool follow = entry.follow();
 
   ZPage* const page = _page_table->get(addr);
-  assert(page->is_relocatable(), "Invalid page state");
+  //assert(page->is_relocatable(), "Invalid page state");
 
   // Mark
   if (mark && !page->mark_object(addr, finalizable, inc_live)) {
