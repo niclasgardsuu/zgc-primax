@@ -119,7 +119,7 @@ ZGeneration::ZGeneration(ZGenerationId id, ZPageTable* page_table, ZPageAllocato
     _mark(this, page_table),
     _relocate(this),
     _relocation_set(this),
-    _r_page_index(0),
+    _r_page_index(/*{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}*/),
     _freed(0),
     _promoted(0),
     _compacted(0),
@@ -277,6 +277,11 @@ void ZGeneration::reset_relocation_set() {
 
   // Reset relocation set
   _relocation_set.reset(_page_allocator);
+
+  // Reset recyclable page indecies for every age
+  for (uint age = 0; age < ZPageAgeMax + 1; age++) {
+    _r_page_index[age] = 0;
+  }
 }
 
 void ZGeneration::synchronize_relocation() {
@@ -1518,8 +1523,10 @@ ZGenerationTracer* ZGenerationOld::jfr_tracer() {
   return &_jfr_tracer;
 }
 
-ZPage* ZGeneration::get_next_recyclable_page() {
-  return _relocation_set.get_r_page(Atomic::fetch_then_add(&_r_page_index, 1u));
+ZPage* ZGeneration::get_next_recyclable_page(ZPageAge age) {
+  ZPage* r = _relocation_set.get_r_page(age, Atomic::fetch_then_add(&_r_page_index[static_cast<uint>(age)], 1u));
+  log_debug(gc)("GENERATION::GET_NEXT_RECYCLABLE page %p, age %zu, index %zu", (void*)r, (size_t)age, _r_page_index[static_cast<uint>(age)]);
+  return r;
 }
 
 void ZGeneration::print_all_r_pages() {

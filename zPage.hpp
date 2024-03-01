@@ -228,6 +228,7 @@ public:
 
   bool init_free_list();
   void reset_recycling_seqnum();
+  bool is_valid();
 
   void print_live_addresses();
 };

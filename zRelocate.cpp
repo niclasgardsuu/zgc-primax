@@ -433,9 +433,12 @@ static ZPage* revive_page(ZPage* target) {
   
   bool success = target->init_free_list();
   if(success) {
+    log_debug(gc)("SUCCSESFULLY INIT");
     target->reset_recycling_seqnum();
-    target->reset_seqnum(); //TODO kanske inte göra detta än? blir de kaos och kommer dom försöka alloca inuti den då? borde ksk hända när den går till nästa target.
+    // target->reset_seqnum(); //TODO kanske inte göra detta än? blir de kaos och kommer dom försöka alloca inuti den då? borde ksk hända när den går till nästa target.
     return target;
+  } else {
+    log_debug(gc)("FAILED INIT");
   }
   //failed revive
   return nullptr;
@@ -481,10 +484,9 @@ public:
     : _generation(generation),
       _in_place_count(0) {}
 
-
   ZPage* revive_and_retire_target_page(ZForwarding* forwarding, ZPage* target) {
-    ZPage* page = revive_page(_generation->get_next_recyclable_page()); //TODO gör denna till const sen när jag inte vill ha den som nullptr <3
-    //också TODO: skicka inte in nullptr. de ska va pointern till target zpage
+    ZPage* page = revive_page(_generation->get_next_recyclable_page(forwarding->to_age()));
+    
     if(page != nullptr) {
       page->print_live_addresses();
     }
@@ -527,6 +529,7 @@ public:
   }
 
   void undo_alloc_object(ZPage* page, zaddress addr, size_t size) const {
+    log_debug(gc)("HOPPAS INTE DU KOMMER HIT :)");
     page->undo_alloc_object(addr, size);
   }
 
@@ -701,6 +704,7 @@ private:
     const zaddress to_addr = forwarding_insert(_forwarding, from_addr, allocated_addr, &cursor);
     if (to_addr != allocated_addr) {
       // Already relocated, undo allocation
+      log_debug(gc)("UNDA ALLOC OOOHHH OHHHHH");
       _allocator->undo_alloc_object(to_page, to_addr, size);
       increase_other_forwarded(size);
     }
@@ -948,7 +952,7 @@ private:
       to_age = _forwarding->to_age();
       to_page = _allocator->revive_and_retire_target_page(_forwarding, target(to_age));
       set_target(to_age, to_page);
-      if (to_page != nullptr && to_page->type() == ZPageType::small) { //TODO: implemented for medium pages as well
+      if (to_page != nullptr && to_page->type() == ZPageType::small) {
         continue;
       }
 

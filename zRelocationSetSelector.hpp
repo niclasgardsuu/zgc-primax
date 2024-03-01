@@ -86,6 +86,7 @@ private:
   const size_t                     _page_fragmentation_limit;
   ZArray<ZPage*>                   _live_pages;
   ZArray<ZPage*>                   _not_selected_pages;
+  ZArray<ZPage*>                   _recyclable_pages[ZPageAgeMax+1];
   size_t                           _forwarding_entries;
   ZRelocationSetSelectorGroupStats _stats[ZPageAgeMax + 1];
 
@@ -108,6 +109,7 @@ public:
   const ZArray<ZPage*>* live_pages() const;
   const ZArray<ZPage*>* selected_pages() const;
   const ZArray<ZPage*>* not_selected_pages() const;
+  const ZArray<ZPage*>* recyclable_pages(ZPageAge age) const;
   size_t forwarding_entries() const;
 
   const ZRelocationSetSelectorGroupStats& stats(ZPageAge age) const;
@@ -142,6 +144,9 @@ public:
   const ZArray<ZPage*>* not_selected_small() const;
   const ZArray<ZPage*>* not_selected_medium() const;
   const ZArray<ZPage*>* not_selected_large() const;
+
+  const ZArray<ZPage*>* recyclable_small(ZPageAge age) const;
+  const ZArray<ZPage*>* recyclable_medium(ZPageAge age) const;
 
   size_t forwarding_entries() const;
 

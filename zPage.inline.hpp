@@ -453,13 +453,7 @@ inline void ZPage::oops_do_current_remembered(Function function) {
 }
 
 inline zaddress ZPage::alloc_object(size_t size) {
-  assert(is_allocating(), "Invalid state");
-
-  if(_recycling_seqnum == _seqnum) {
-    assert(_allocator != nullptr, "Expected a free list allocator");
-    zaddress addr2 = alloc_object_free_list(size);
-    return addr2;
-  }
+  assert(is_allocating() || _recycling_seqnum == generation()->seqnum(), "Invalid state");
 
   const size_t aligned_size = align_up(size, object_alignment());
   const zoffset_end addr = top();
@@ -487,12 +481,6 @@ inline zaddress ZPage::alloc_object_atomic(size_t size) {
   const size_t aligned_size = align_up(size, object_alignment());
   zoffset_end addr = top();
 
-  if(_recycling_seqnum == _seqnum) {
-    assert(_allocator != nullptr, "Expected a free list allocator");
-    zaddress addr2 = alloc_object_free_list(aligned_size);
-    return addr2;
-  }
-
   for (;;) {
     zoffset_end new_top;
 
@@ -519,7 +507,7 @@ inline zaddress ZPage::alloc_object_atomic(size_t size) {
 
 inline bool ZPage::undo_alloc_object(zaddress addr, size_t size) {
   assert(is_allocating(), "Invalid state");
-
+ 
   const zoffset offset = ZAddress::offset(addr);
   const size_t aligned_size = align_up(size, object_alignment());
   const zoffset_end old_top = top();
@@ -570,23 +558,6 @@ inline void ZPage::log_msg(const char* msg_format, ...) const {
     print_on_msg(&stream, err_msg(FormatBufferDummy(), msg_format, argp));
     va_end(argp);
   }
-}
-
-inline zaddress ZPage::alloc_object_free_list(size_t size) {
-  zaddress addr = to_zaddress((uintptr_t)_allocator->allocate(size));
-  if(is_null(addr)) {
-    return addr;
-  }
-  _top = top() > to_zoffset_end(to_zoffset((uintptr_t)0x3ffffffffff & untype(addr + size))) ?
-    top() :
-    to_zoffset_end(to_zoffset((uintptr_t)0x3ffffffffff & untype(addr + size)));
-  log_debug(gc)("\nlive objects: %d \
-                 \nalloc addr  : %p \
-                 \nsize        : %zu \
-                 \nnew top     : %p \
-                 \n----------- \
-                 \n", live_objects(), (void*)addr, size , (void*)_top);
-  return addr;
 }
 
 #endif // SHARE_GC_Z_ZPAGE_INLINE_HPP

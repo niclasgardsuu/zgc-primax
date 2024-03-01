@@ -54,6 +54,7 @@ ZRelocationSetSelectorGroup::ZRelocationSetSelectorGroup(const char* name,
     _page_fragmentation_limit(page_size * (fragmentation_limit / 100)),
     _live_pages(),
     _not_selected_pages(),
+    _recyclable_pages(),
     _forwarding_entries(0),
     _stats() {}
 
@@ -164,6 +165,10 @@ void ZRelocationSetSelectorGroup::select_inner() {
     ZPage* const page = _live_pages.at(i);
     if (page->is_young()) {
       _not_selected_pages.append(page);
+      //only recycle page if there is above the threshold much space left
+      if (page->live_bytes() < 1000000000) {
+        _recyclable_pages[static_cast<uint>(page->age())].append(page);
+      }
     }
   }
   _live_pages.trunc_to(selected_from);

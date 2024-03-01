@@ -323,7 +323,7 @@ void ZPage::fatal_msg(const char* msg) const {
 }
 
 bool ZPage::init_free_list() {
-  // log_debug(gc)("START INITIALIZING FREE LIST %p",(void*)start());
+  log_debug(gc)("START INITIALIZING FREE LIST %p",(void*)start());
   if(_allocator){
     //reset the current allocator, and mark entire page as allocated
     _allocator->reset();
@@ -335,6 +335,7 @@ bool ZPage::init_free_list() {
         return (size_t)0;
       }
     };
+    log_debug(gc)("INIT START ASDASASDASDASD%p", (void*)ZOffset::address(start()));
     _allocator = new AllocatorWrapper<ZBuddyAllocator>((void*)ZOffset::address(start()), size(), size_func, 0, true);
   }
   
@@ -342,11 +343,11 @@ bool ZPage::init_free_list() {
     log_debug(gc)("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOLD PAGE FOUND init");
     return false;
   } else {
-    // log_debug(gc)("young");
+    log_debug(gc)("young");
   }
 
   if(live_objects() <= 0) {
-    // log_debug(gc)("WTFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
+    log_debug(gc)("WTFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
     _recycling_seqnum -= 1; 
     _top = to_zoffset_end(start());
     return false;
@@ -364,7 +365,9 @@ bool ZPage::init_free_list() {
     
     if(allocated_addr_p - curr > MINIMUM_DISTANCE_BETWEEN_OBJECTS_TO_CONSIDER_FREEING_RANGE_BETWEEN_THEM__LONG_NAME__I_KNOW___ILL_CHANGE_IT_LATER) {
       log_debug(gc)("initadr2 : %p\ninitsiz2 : %zu", (void*)curr, allocated_addr_p - curr);
-      _allocator->free_range((void*)curr,allocated_addr_p - curr);
+      if(allocated_addr_p - curr >= 16) {
+        _allocator->free_range((void*)curr,allocated_addr_p - curr);
+      }
     } else if(allocated_addr_p - curr > 0) {
       log_debug(gc)("initadr : %p\ninitsiz : %zu", (void*)curr, allocated_addr_p - curr);
     }
@@ -378,8 +381,8 @@ bool ZPage::init_free_list() {
   _livemap.iterate_forced(_generation_id, free_internal_range);
   //free final block after last object
   _allocator->free_range((void*)curr, (uintptr_t)ZOffset::address(to_zoffset(end()))-curr); 
-  log_debug(gc)("initadr : %p\ninitsiz : %zu", (void*)curr, untype(ZOffset::address(to_zoffset(end())))-curr);
-  // log_debug(gc)("FINISHED FREE LIST INITIALIZATION %p",(void*)start());
+  log_debug(gc)("initadr : %p\ninitsiz : %zu", (void*)curr, (uintptr_t)ZOffset::address(to_zoffset(end()))-curr);
+  log_debug(gc)("FINISHED FREE LIST INITIALIZATION %p",(void*)start());
   return true;
 }
 
@@ -406,23 +409,21 @@ void ZPage::reset_recycling_seqnum() {
   //också, se till att på nåt sätt sätta bump pointer på nåt konstigt ställa så att 
   //inga vanliga allocations kan göras. Men vet inte än hur ja ska göra för o 
   //skilja recycle allocation och vanlig allocation.
-  _recycling_seqnum = generation()->seqnum();
+  Atomic::store(&_recycling_seqnum, generation()->seqnum());
+}
+
+bool ZPage::is_valid() {
+  return _seqnum < 1000 && untype(_top) < ZAddressOffsetMax && static_cast<uint>(_age) <= 16;
 }
 
 void ZPage::print_live_addresses() {
   int age = 1;
   if(_age == ZPageAge::old) {
     age = 2;
-    // log_debug(gc)("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOLD PAGE FOUND");
+    log_debug(gc)("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOLD PAGE FOUND");
+    return;
   }
-  // log_debug(gc)("seqnum-age: %d-%d", _seqnum,age);
-  // log_debug(gc)("start     : %p",(void*)(start()));
-  // log_debug(gc)("top       : %p", (void*)(top()));
-  // log_debug(gc)("end       : %p",(void*)(end()));
-  // int* a = (int*)_allocator->allocate(64);
-  // int* b = (int*)_allocator->allocate(1);
-  // int* c = (int*)_allocator->allocate(64);
-  // _allocator->free(b);
+
   auto do_bit = [&](BitMap::idx_t index) -> bool {
     zoffset offset = offset_from_bit_index(index);
     const zaddress to_addr = ZOffset::address(offset);
@@ -434,4 +435,33 @@ void ZPage::print_live_addresses() {
   };
   _livemap.iterate_forced(_generation_id, do_bit);
   log_debug(gc)("Done Printing Live Addresses");
+}
+
+zaddress ZPage::alloc_object_free_list(size_t size) {
+  if(!_allocator || _recycling_seqnum != generation()->seqnum()) {
+    return alloc_object(size);
+  }
+
+  const size_t aligned_size = align_up(size, object_alignment());
+
+  zaddress addr = to_zaddress((uintptr_t)_allocator->allocate(aligned_size));
+  if(is_null(addr)) {
+    return zaddress::null;
+  }
+
+  if((uintptr_t)_top < ((uintptr_t)0x3ffffffffff & ((uintptr_t)addr+aligned_size))) {
+    log_debug(gc)("\ntop   : %p\nnewtop: %p", (void*)top(), (void*)to_zoffset_end(ZAddress::offset(addr),aligned_size));
+  }
+
+  _top = top() > to_zoffset_end(ZAddress::offset(addr),aligned_size) ?
+    top() :
+    to_zoffset_end(ZAddress::offset(addr),aligned_size);
+  log_debug(gc)("\nlive objects: %d \
+                 \nalloc addr  : %p \
+                 \nsize        : %zu \
+                 \nnew top     : %p \
+                 \nthis        : %p \
+                 \n----------- \
+                 \n", live_objects(), (void*)addr, aligned_size , (void*)_top, (void*)this);
+  return addr;
 }
