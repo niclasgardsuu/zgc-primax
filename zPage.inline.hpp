@@ -200,7 +200,7 @@ inline bool ZPage::is_allocating() const {
 }
 
 inline bool ZPage::is_relocatable() const {
-  return _seqnum < generation()->seqnum();// || _recycling_seqnum == generation()->seqnum();
+  return _seqnum < generation()->seqnum();
 }
 
 inline uint64_t ZPage::last_used() const {
@@ -212,7 +212,22 @@ inline void ZPage::set_last_used() {
 }
 
 inline bool ZPage::is_in(zoffset offset) const {
-  return offset >= start() && offset < top();
+  bool res = offset >= start() && offset < top();
+  if(!res) {
+    log_debug(gc)("\npage    : %p \
+                   \ntop     : %p \
+                   \nstart   : %p \
+                   \nend     : %p \
+                   \noffset  : %p \
+                   \nres     : %d",
+                   (void*)this,
+                   (void*)top(),
+                   (void*)start(),
+                   (void*)end(),
+                   (void*)offset,
+                   res);
+  }
+  return res;
 }
 
 inline bool ZPage::is_in(zaddress addr) const {
@@ -247,7 +262,7 @@ inline zoffset ZPage::global_offset(uintptr_t local_offset) const {
 }
 
 inline bool ZPage::is_marked() const {
-  //assert(is_relocatable(), "Invalid page state");
+  assert(is_relocatable(), "Invalid page state");
   return _livemap.is_marked(_generation_id);
 }
 
@@ -266,13 +281,13 @@ inline oop ZPage::object_from_bit_index(BitMap::idx_t index) const {
 }
 
 inline bool ZPage::is_live_bit_set(zaddress addr) const {
-  //assert(is_relocatable(), "Invalid page state");
+  assert(is_relocatable(), "Invalid page state");
   const BitMap::idx_t index = bit_index(addr);
   return _livemap.get(_generation_id, index);
 }
 
 inline bool ZPage::is_strong_bit_set(zaddress addr) const {
-  //assert(is_relocatable(), "Invalid page state");
+  assert(is_relocatable(), "Invalid page state");
   const BitMap::idx_t index = bit_index(addr);
   return _livemap.get(_generation_id, index + 1);
 }
@@ -308,7 +323,7 @@ inline bool ZPage::is_object_marked(zaddress addr, bool finalizable) const {
 }
 
 inline bool ZPage::mark_object(zaddress addr, bool finalizable, bool& inc_live) {
-  //assert(is_relocatable(), "Invalid page state");
+  assert(is_relocatable(), "Invalid page state");
   assert(is_in(addr), "Invalid address");
 
   // Verify oop
@@ -453,7 +468,7 @@ inline void ZPage::oops_do_current_remembered(Function function) {
 }
 
 inline zaddress ZPage::alloc_object(size_t size) {
-  assert(is_allocating() || _recycling_seqnum == generation()->seqnum(), "Invalid state");
+  assert(is_allocating() || _seqnum == generation()->seqnum(), "Invalid state");
 
   const size_t aligned_size = align_up(size, object_alignment());
   const zoffset_end addr = top();

@@ -176,6 +176,7 @@ public:
 
   ZPage* get_next_recyclable_page(ZPageAge age);
   void print_all_r_pages();
+  void register_recycled_pages(const ZArray<ZPage*>& pages);
 };
 
 enum class ZYoungType {

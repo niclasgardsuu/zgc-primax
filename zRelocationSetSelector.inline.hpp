@@ -104,10 +104,6 @@ inline const ZArray<ZPage*>* ZRelocationSetSelectorGroup::not_selected_pages() c
   return &_not_selected_pages;
 }
 
-inline const ZArray<ZPage*>* ZRelocationSetSelectorGroup::recyclable_pages(ZPageAge age) const {
-  return &_recyclable_pages[static_cast<uint>(age)];
-}
-
 inline size_t ZRelocationSetSelectorGroup::forwarding_entries() const {
   return _forwarding_entries;
 }
@@ -203,14 +199,6 @@ inline const ZArray<ZPage*>* ZRelocationSetSelector::not_selected_medium() const
 
 inline const ZArray<ZPage*>* ZRelocationSetSelector::not_selected_large() const {
   return _large.not_selected_pages();
-}
-
-inline const ZArray<ZPage*>* ZRelocationSetSelector::recyclable_small(ZPageAge age) const {
-  return _small.recyclable_pages(age);
-}
-
-inline const ZArray<ZPage*>* ZRelocationSetSelector::recyclable_medium(ZPageAge age) const {
-  return _medium.recyclable_pages(age);
 }
 
 inline size_t ZRelocationSetSelector::forwarding_entries() const {

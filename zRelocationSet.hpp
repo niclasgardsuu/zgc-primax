@@ -44,6 +44,7 @@ private:
   ZForwarding**         _forwardings;
   size_t                _nforwardings;
   ZLock                 _promotion_lock;
+  ZLock                 _recycling_lock;
   ZArray<ZPage*>        _flip_promoted_pages;
   ZArray<ZPage*>        _in_place_relocate_promoted_pages;
   ZArray<ZPage*>        _recyclable_pages[ZPageAgeMax + 1];
@@ -64,6 +65,7 @@ public:
 
   ZPage* get_r_page(ZPageAge age, size_t index);
   void print_all_r_pages();
+  void register_recycled_pages(const ZArray<ZPage*>& pages);
 };
 
 template <bool Parallel>

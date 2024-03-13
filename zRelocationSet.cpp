@@ -168,22 +168,6 @@ void ZRelocationSet::install(const ZRelocationSetSelector* selector) {
   _forwardings = task.forwardings();
   _nforwardings = task.nforwardings();
 
-  //Copy the arrays of recyclable pages from selector into _recyclable_pages
-  for(uint ageInt = 0; ageInt < ZPageAgeMax + 1; ageInt++) {
-    const ZPageAge age = static_cast<ZPageAge>(ageInt);
-    //iterate over every selector->recyclable_small array for each age, and append every element to _recyclable_pages[ageINt]
-    ZArrayIterator<ZPage*> iter(selector->recyclable_small(age));
-    for (ZPage* page; iter.next(&page);) {
-      if(page->is_valid()) {
-        log_debug(gc)("recyclable page is awesome %p", (void*)page);
-      } else {
-        log_debug(gc)("RECYCLABLE PAGE IS GARBAGE %p", (void*)page);
-      }
-      _recyclable_pages[ageInt].append(page);
-      _nrecyclable_pages[ageInt]++;
-    }
-  }
-
   // Update statistics
   _generation->stat_relocation()->at_install_relocation_set(_allocator.size());
 }
@@ -243,4 +227,12 @@ void ZRelocationSet::print_all_r_pages() {
   // for (ZPage* r_page; r_iter.next(&r_page);) {
   //   log_debug(gc)("r_page: %p",(void*)r_page);
   // }
+}
+
+void ZRelocationSet::register_recycled_pages(const ZArray<ZPage*>& pages) {
+  ZLocker<ZLock> locker(&_recycling_lock);
+  for(ZPage* const page : pages) {
+    _recyclable_pages[static_cast<uint>(page->age())].append(page);
+    _nrecyclable_pages[static_cast<uint>(page->age())]++;
+  }
 }

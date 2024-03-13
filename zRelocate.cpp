@@ -434,8 +434,8 @@ static ZPage* revive_page(ZPage* target) {
   bool success = target->init_free_list();
   if(success) {
     log_debug(gc)("SUCCSESFULLY INIT");
-    target->reset_recycling_seqnum();
-    // target->reset_seqnum(); //TODO kanske inte göra detta än? blir de kaos och kommer dom försöka alloca inuti den då? borde ksk hända när den går till nästa target.
+    target->reset_seqnum(); 
+    target->reset_recycling_seqnum(); 
     return target;
   } else {
     log_debug(gc)("FAILED INIT");
@@ -525,7 +525,7 @@ public:
   }
 
   zaddress alloc_object(ZPage* page, size_t size) const {
-    return (page != nullptr) ? page->alloc_object(size) : zaddress::null;
+    return (page != nullptr) ? page->alloc_object_free_list(size) : zaddress::null;
   }
 
   void undo_alloc_object(ZPage* page, zaddress addr, size_t size) const {
@@ -1340,6 +1340,7 @@ public:
   virtual void work() {
     SuspendibleThreadSetJoiner sts_joiner;
     ZArray<ZPage*> promoted_pages;
+    ZArray<ZPage*> recyclable_pages;
 
     for (ZPage* prev_page; _iter.next(&prev_page);) {
       const ZPageAge from_age = prev_page->age();
@@ -1371,11 +1372,19 @@ public:
         // Defer promoted page registration times the lock is taken
         promoted_pages.push(prev_page);
       }
+      if(new_page->type() == ZPageType::small && 
+         !(from_age != ZPageAge::old && to_age == ZPageAge::old) && 
+         new_page->live_objects() > 0 &&
+         new_page->live_bytes() < ZRecycleMaximumLive) {
+        recyclable_pages.push(new_page);
+      }
 
       SuspendibleThreadSet::yield();
     }
 
     ZGeneration::young()->register_flip_promoted(promoted_pages);
+    ZGeneration::young()->register_recycled_pages(recyclable_pages);
+    ZGeneration::old()->register_recycled_pages(recyclable_pages);
   }
 };
 
