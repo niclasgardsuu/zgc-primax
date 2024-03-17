@@ -417,7 +417,7 @@ zaddress ZRelocate::forward_object(ZForwarding* forwarding, zaddress_unsafe from
 
 static ZPage* revive_page(ZPage* target) {
   if (ZStressRelocateInPlace) {
-    // Simulate failure to revive a new page. This will
+    // Simulate failure to revive a page. This will
     // cause the page being relocated to be relocated in-place.
     return nullptr;
   }
@@ -426,19 +426,10 @@ static ZPage* revive_page(ZPage* target) {
     //there are no potential pages to revive
     return nullptr;
   }
-
-  ZAllocationFlags flags;     //??
-  flags.set_non_blocking();   //?? antar dom här ska va kvar?
-  flags.set_gc_relocation();  //??
   
-  bool success = target->init_free_list();
-  if(success) {
-    target->reset_recycling_seqnum();
-    target->reset_seqnum(); //TODO kanske inte göra detta än? blir de kaos och kommer dom försöka alloca inuti den då? borde ksk hända när den går till nästa target.
-    return target;
-  }
-  //failed revive
-  return nullptr;
+  target->reset_seqnum(); 
+  target->reset_recycling_seqnum(); 
+  return target;
 }
 
 static ZPage* alloc_page(ZAllocatorForRelocation* allocator, ZPageType type, size_t size) {
@@ -481,10 +472,9 @@ public:
     : _generation(generation),
       _in_place_count(0) {}
 
-
   ZPage* revive_and_retire_target_page(ZForwarding* forwarding, ZPage* target) {
-    ZPage* page = revive_page(_generation->get_next_recyclable_page()); //TODO gör denna till const sen när jag inte vill ha den som nullptr <3
-    //också TODO: skicka inte in nullptr. de ska va pointern till target zpage
+    ZPage* page = revive_page(_generation->get_next_recyclable_page(forwarding->to_age()));
+    
     if(page != nullptr) {
       page->print_live_addresses();
     }
@@ -523,10 +513,11 @@ public:
   }
 
   zaddress alloc_object(ZPage* page, size_t size) const {
-    return (page != nullptr) ? page->alloc_object(size) : zaddress::null;
+    return (page != nullptr) ? page->alloc_object_free_list(size) : zaddress::null;
   }
 
   void undo_alloc_object(ZPage* page, zaddress addr, size_t size) const {
+    log_debug(gc)("HOPPAS INTE DU KOMMER HIT :)");
     page->undo_alloc_object(addr, size);
   }
 
@@ -701,6 +692,7 @@ private:
     const zaddress to_addr = forwarding_insert(_forwarding, from_addr, allocated_addr, &cursor);
     if (to_addr != allocated_addr) {
       // Already relocated, undo allocation
+      log_debug(gc)("UNDA ALLOC OOOHHH OHHHHH");
       _allocator->undo_alloc_object(to_page, to_addr, size);
       increase_other_forwarded(size);
     }
@@ -942,20 +934,20 @@ private:
 
     while (!try_relocate_object(addr)) {
       ZPage* to_page;
-      ZPageAge to_age;
+      const ZPageAge to_age = _forwarding->to_age();
       // Revive an old page and use it as a target, if there are no
       // old pages left to choose from, try allocating a new target page
-      to_age = _forwarding->to_age();
-      to_page = _allocator->revive_and_retire_target_page(_forwarding, target(to_age));
-      set_target(to_age, to_page);
-      if (to_page != nullptr && to_page->type() == ZPageType::small) { //TODO: implemented for medium pages as well
-        continue;
+      if(to_age == ZPageAge::old) {
+        to_page = _allocator->revive_and_retire_target_page(_forwarding, target(to_age));
+        set_target(to_age, to_page);
+        if (to_page != nullptr && to_page->type() == ZPageType::small) {
+          continue;
+        }
       }
 
       // Allocate a new target page, or if that fails, use the page being
       // relocated as the new target, which will cause it to be relocated
       // in-place.
-      to_age = _forwarding->to_age();
       to_page = _allocator->alloc_and_retire_target_page(_forwarding, target(to_age));
       set_target(to_age, to_page);
       if (to_page != nullptr) {
@@ -1336,6 +1328,7 @@ public:
   virtual void work() {
     SuspendibleThreadSetJoiner sts_joiner;
     ZArray<ZPage*> promoted_pages;
+    ZArray<ZPage*> recyclable_pages;
 
     for (ZPage* prev_page; _iter.next(&prev_page);) {
       const ZPageAge from_age = prev_page->age();
@@ -1360,18 +1353,31 @@ public:
 
       // Setup to-space page
       ZPage* const new_page = promotion ? prev_page->clone_limited_promote_flipped() : prev_page;
-      new_page->reset(to_age, ZPageResetType::FlipAging);
 
       if (promotion) {
         ZGeneration::young()->flip_promote(prev_page, new_page);
         // Defer promoted page registration times the lock is taken
         promoted_pages.push(prev_page);
       }
+      if(new_page->type() == ZPageType::small && 
+         to_age != ZPageAge::old && 
+         new_page->live_objects() > 0 &&
+         new_page->live_bytes() < ZRecycleMaximumLive*new_page->size()) {
+        bool init = new_page->init_free_list();
+        if(init) {
+          recyclable_pages.push(new_page);
+          new_page->reset_recycling_seqnum();
+        }
+      }
+
+      new_page->reset(to_age, ZPageResetType::FlipAging);
 
       SuspendibleThreadSet::yield();
     }
 
     ZGeneration::young()->register_flip_promoted(promoted_pages);
+    ZGeneration::young()->register_recycled_pages(recyclable_pages);
+    // ZGeneration::old()->register_recycled_pages(recyclable_pages);
   }
 };
 

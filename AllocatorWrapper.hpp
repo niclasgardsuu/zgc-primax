@@ -11,7 +11,7 @@ class AllocatorWrapper : public CHeapObj<mtGC>{
 private:
     A allocator;
 public:
-    AllocatorWrapper(void* initial_pool, size_t pool_size, allocation_size_func size_func, int lazyThreshold, bool startFull);
+    AllocatorWrapper(void* initial_pool, size_t pool_size, int lazyThreshold, bool startFull);
     void reset();
     void *allocate(size_t size);
     void free(void *ptr);

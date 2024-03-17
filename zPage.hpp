@@ -61,6 +61,7 @@ private:
   ZPageAge                              _age;
   uint8_t                               _numa_id;
   uint32_t                              _seqnum;
+  uint32_t                              _recycling_seqnum;
   uint32_t                              _seqnum_other;
   ZVirtualMemory                        _virtual;
   volatile zoffset_end                  _top;
@@ -69,8 +70,8 @@ private:
   uint64_t                              _last_used;
   ZPhysicalMemory                       _physical;
   ZListNode<ZPage>                      _node;
-  AllocatorWrapper<ZBuddyAllocator>* _allocator;
-  uint32_t                              _recycling_seqnum;
+  AllocatorWrapper<ZinaryBuddyAllocator>* _allocator;
+
 
   ZPageType type_from_size(size_t size) const;
   const char* type_to_string() const;
@@ -95,6 +96,7 @@ public:
   ZPage(ZPageType type, const ZVirtualMemory& vmem, const ZPhysicalMemory& pmem);
 
   void reset_seqnum();
+  void reset_recycling_seqnum();
   ZPage* clone_limited() const;
   ZPage* clone_limited_promote_flipped() const;
 
@@ -227,7 +229,6 @@ public:
   void fatal_msg(const char* msg) const;
 
   bool init_free_list();
-  void reset_recycling_seqnum();
 
   void print_live_addresses();
 };

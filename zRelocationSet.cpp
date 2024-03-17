@@ -144,7 +144,9 @@ ZRelocationSet::ZRelocationSet(ZGeneration* generation)
     _nforwardings(0),
     _promotion_lock(),
     _flip_promoted_pages(),
-    _in_place_relocate_promoted_pages() {}
+    _in_place_relocate_promoted_pages(),
+    _recyclable_pages(),
+    _nrecyclable_pages() {}
 
 ZWorkers* ZRelocationSet::workers() const {
   return _generation->workers();
@@ -165,20 +167,6 @@ void ZRelocationSet::install(const ZRelocationSetSelector* selector) {
 
   _forwardings = task.forwardings();
   _nforwardings = task.nforwardings();
-
-  //Copy the array of not selected pages.
-  ZArrayIterator<ZPage*> not_selected_small_iter(selector->not_selected_small());
-  ZArrayIterator<ZPage*> not_selected_medium_iter(selector->not_selected_medium());
-  _not_selected_small_size = 0;
-  _not_selected_medium_size = 0;
-  for (ZPage* r_page; not_selected_small_iter.next(&r_page);) {
-    _not_selected_small.append(r_page);
-    _not_selected_small_size++;
-  }
-  for (ZPage* r_page; not_selected_medium_iter.next(&r_page);) {
-    _not_selected_medium.append(r_page);
-    _not_selected_medium_size++;
-  }
 
   // Update statistics
   _generation->stat_relocation()->at_install_relocation_set(_allocator.size());
@@ -202,6 +190,12 @@ void ZRelocationSet::reset(ZPageAllocator* page_allocator) {
 
   _nforwardings = 0;
 
+  // Reset recyclable pages
+  for (uint age = 0; age < ZPageAgeMax+1; age++) {
+    _recyclable_pages[age].clear();
+    _nrecyclable_pages[age] = 0;
+  }
+
   destroy_and_clear(page_allocator, &_in_place_relocate_promoted_pages);
   destroy_and_clear(page_allocator, &_flip_promoted_pages);
 }
@@ -220,17 +214,34 @@ void ZRelocationSet::register_in_place_relocate_promoted(ZPage* page) {
   _in_place_relocate_promoted_pages.append(page);
 }
 
-ZPage* ZRelocationSet::get_r_page(size_t index) {
-  if(index < _not_selected_small_size) {
-    return _not_selected_small.at(index);
+ZPage* ZRelocationSet::get_r_page(ZPageAge age, size_t index) {
+  if(index < _nrecyclable_pages[static_cast<uint>(age)]) {
+    return _recyclable_pages[static_cast<uint>(age)].at(index);
   } else {
     return nullptr;
   }
 }
 
 void ZRelocationSet::print_all_r_pages() {
-  ZArrayIterator<ZPage*> r_iter(&_not_selected_small);
-  for (ZPage* r_page; r_iter.next(&r_page);) {
-    log_debug(gc)("r_page: %p",(void*)r_page);
+  // ZArrayIterator<ZPage*> r_iter(&_recyclable_small_pages);
+  // for (ZPage* r_page; r_iter.next(&r_page);) {
+  //   log_debug(gc)("r_page: %p",(void*)r_page);
+  // }
+}
+
+void ZRelocationSet::register_recycled_pages(const ZArray<ZPage*>& pages) {
+  ZLocker<ZLock> locker(&_recycling_lock);
+  for(ZPage* const page : pages) {
+    _recyclable_pages[static_cast<uint>(page->age())].append(page);
+    _nrecyclable_pages[static_cast<uint>(page->age())]++;
+  }
+}
+
+void ZRelocationSet::reset_recycled_pages() {
+  for (uint i = 0; i <= ZPageAgeMax; ++i) {
+    for(uint j = 0; j < _nrecyclable_pages[i]; ++j) {
+      ZPage* p = _recyclable_pages[i].at(j);
+      p->reset(p->age(), ZPageResetType::FlipAging);
+    }
   }
 }

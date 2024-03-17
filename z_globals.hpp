@@ -71,6 +71,15 @@
           "Young generation tenuring threshold, -1 for dynamic computation")\
           range(-1, static_cast<int>(ZPageAgeMax))                          \
                                                                             \
+  product(int, ZMinLiveBitDistance, 0, DIAGNOSTIC,"")                      \
+          range(0, 262144 /*Small Livemap Size*/)                           \
+                                                                            \
+  product(int, ZMinFreeBlockSize, 16, DIAGNOSTIC,"")                        \
+          range(16, 2097152 /*Small Page Size*/)                             \
+                                                                            \
+  product(double, ZRecycleMaximumLive, 1, DIAGNOSTIC,"")                  \
+          range(0, 1)                                                       \
+                                                                            \
   develop(size_t, ZForceDiscontiguousHeapReservations, 0,                   \
           "The gc will attempt to split the heap reservation into this "    \
           "many reservations, subject to available virtual address space "  \

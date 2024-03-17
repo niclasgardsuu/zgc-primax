@@ -44,12 +44,11 @@ private:
   ZForwarding**         _forwardings;
   size_t                _nforwardings;
   ZLock                 _promotion_lock;
+  ZLock                 _recycling_lock;
   ZArray<ZPage*>        _flip_promoted_pages;
   ZArray<ZPage*>        _in_place_relocate_promoted_pages;
-  ZArray<ZPage*>        _not_selected_small;
-  ZArray<ZPage*>        _not_selected_medium;
-  size_t                _not_selected_small_size;
-  size_t                _not_selected_medium_size;
+  ZArray<ZPage*>        _recyclable_pages[ZPageAgeMax + 1];
+  size_t                _nrecyclable_pages[ZPageAgeMax + 1];
 
   ZWorkers* workers() const;
 
@@ -64,8 +63,10 @@ public:
   void register_flip_promoted(const ZArray<ZPage*>& pages);
   void register_in_place_relocate_promoted(ZPage* page);
 
-  ZPage* get_r_page(size_t index);
+  ZPage* get_r_page(ZPageAge age, size_t index);
   void print_all_r_pages();
+  void register_recycled_pages(const ZArray<ZPage*>& pages);
+  void reset_recycled_pages();
 };
 
 template <bool Parallel>
