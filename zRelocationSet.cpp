@@ -236,3 +236,12 @@ void ZRelocationSet::register_recycled_pages(const ZArray<ZPage*>& pages) {
     _nrecyclable_pages[static_cast<uint>(page->age())]++;
   }
 }
+
+void ZRelocationSet::reset_recycled_pages() {
+  for (uint i = 0; i <= ZPageAgeMax; ++i) {
+    for(uint j = 0; j < _nrecyclable_pages[i]; ++j) {
+      ZPage* p = _recyclable_pages[i].at(j);
+      p->reset(p->age(), ZPageResetType::FlipAging);
+    }
+  }
+}

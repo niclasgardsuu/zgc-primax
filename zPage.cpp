@@ -168,11 +168,6 @@ void ZPage::reset(ZPageAge age, ZPageResetType type) {
     // Promoted in-place relocations reset the live map,
     // because they clone the page.
     _livemap.reset();
-
-    //the generation seqnum resets when being promoted, which
-    //means we have to set the recycling sequence number to an 
-    //invalid state
-    _recycling_seqnum = -1;
   }
 }
 
@@ -358,37 +353,27 @@ bool ZPage::init_free_list() {
   //spaces inbetween live objects.
   // const size_t ZMinLiveBitDistance = 8;
   // const size_t ZMinFreeBlockSize = 1024;
-  BitMap::idx_t prev = 0;
+  zaddress curr = ZOffset::address(this->start());
   bool freed = false;
-  auto free_internal_range = [&](BitMap::idx_t curr) -> bool {
-    if(curr - prev > (long unsigned int)ZMinLiveBitDistance) {
-      zaddress prev_addr = ZOffset::address(offset_from_bit_index(prev));
-      zaddress curr_addr = ZOffset::address(offset_from_bit_index(curr));
-      if(prev != 0) { // prev might be the leading free block
-        prev_addr = prev_addr + ZUtils::object_size(prev_addr);
-      }
-      size_t free_size = align_down(curr_addr - prev_addr, object_alignment());
-      if(free_size >= (long unsigned int)ZMinFreeBlockSize) {
-        _allocator->free_range((void*)prev_addr,free_size);
-        freed = true;
-        log_debug(gc)("initadr : %p\ninitsiz : %zu", (void*)prev_addr, free_size);
-      }
+  auto free_internal_range = [&](BitMap::idx_t idx) -> bool {
+    zaddress addr = ZOffset::address(offset_from_bit_index(idx));
+    size_t free_size = align_down(addr - curr, object_alignment());
+    if(free_size >= (long unsigned int)ZMinFreeBlockSize) {
+      _allocator->free_range((void*)curr,free_size);
+      freed = true;
+      log_debug(gc)("initadr : %p\ninitsiz : %zu", (void*)curr, free_size);
     }
-    
-    prev  = curr;
+    curr = addr + ZUtils::object_size(addr);
     return true;
   };
 
   _livemap.iterate_forced(_generation_id, free_internal_range);
 
   if(freed) { // A free block was found in the external fragmentation
-    //free final block after last object
-    zaddress curr_addr = ZOffset::address(offset_from_bit_index(prev));
-    curr_addr = curr_addr + ZUtils::object_size(curr_addr);
-    size_t final_block_size = align_down(ZOffset::address(to_zoffset(end()))-curr_addr, object_alignment());
+    size_t final_block_size = align_down(ZOffset::address(to_zoffset(end()))-curr, object_alignment());
     if(final_block_size >= (long unsigned int)ZMinFreeBlockSize) {
-      _allocator->free_range((void*)curr_addr, final_block_size); 
-      log_debug(gc)("initadr : %p\ninitsiz : %zu", (void*)curr_addr, final_block_size);
+      _allocator->free_range((void*)curr, final_block_size); 
+      log_debug(gc)("initadr : %p\ninitsiz : %zu", (void*)curr, final_block_size);
     }
   } else { // No free blocks that satisfy conditions. revert to bump pointer
     delete _allocator;
@@ -396,10 +381,6 @@ bool ZPage::init_free_list() {
   }
   log_debug(gc)("FINISHED FREE LIST INITIALIZATION %p",(void*)start());
   return true;
-}
-
-bool ZPage::is_valid() {
-  return _seqnum < 1000 && untype(_top) < ZAddressOffsetMax && static_cast<uint>(_age) <= 16;
 }
 
 void ZPage::print_live_addresses() {
@@ -420,7 +401,7 @@ void ZPage::print_live_addresses() {
     return true;
   };
   _livemap.iterate_forced(_generation_id, do_bit);
-  // log_debug(gc)("Done Printing Live Addresses");
+  log_debug(gc)("Done Printing Live Addresses");
 }
 
 zaddress ZPage::alloc_object_free_list(size_t size) {
@@ -450,6 +431,11 @@ zaddress ZPage::alloc_object_free_list(size_t size) {
     log_debug(gc)("\ntop   : %p\nnewtop: %p", (void*)top(), (void*)to_zoffset_end(ZAddress::offset(addr),aligned_size));
   }
 
+  
+  const BitMap::idx_t index = bit_index(addr);
+  bool test = false;
+  _livemap.set(generation()->id(), index, true, test);
+
   _top = top() > to_zoffset_end(ZAddress::offset(addr),aligned_size) ?
     top() :
     to_zoffset_end(ZAddress::offset(addr),aligned_size);
@@ -461,8 +447,4 @@ zaddress ZPage::alloc_object_free_list(size_t size) {
                  \n----------- \
                  \n", live_objects(), (void*)addr, aligned_size , (void*)_top, (void*)this);
   return addr;
-}
-
-void ZPage::break_aaah() {
-  log_debug(gc)("break_aaah");
 }

@@ -417,7 +417,7 @@ zaddress ZRelocate::forward_object(ZForwarding* forwarding, zaddress_unsafe from
 
 static ZPage* revive_page(ZPage* target) {
   if (ZStressRelocateInPlace) {
-    // Simulate failure to revive a new page. This will
+    // Simulate failure to revive a page. This will
     // cause the page being relocated to be relocated in-place.
     return nullptr;
   }
@@ -426,22 +426,10 @@ static ZPage* revive_page(ZPage* target) {
     //there are no potential pages to revive
     return nullptr;
   }
-
-  ZAllocationFlags flags;     //??
-  flags.set_non_blocking();   //?? antar dom här ska va kvar?
-  flags.set_gc_relocation();  //??
   
-  bool success = target->init_free_list();
-  if(success) {
-    log_debug(gc)("SUCCSESFULLY INIT");
-    target->reset_seqnum(); 
-    target->reset_recycling_seqnum(); 
-    return target;
-  } else {
-    log_debug(gc)("FAILED INIT");
-  }
-  //failed revive
-  return nullptr;
+  target->reset_seqnum(); 
+  target->reset_recycling_seqnum(); 
+  return target;
 }
 
 static ZPage* alloc_page(ZAllocatorForRelocation* allocator, ZPageType type, size_t size) {
@@ -946,20 +934,20 @@ private:
 
     while (!try_relocate_object(addr)) {
       ZPage* to_page;
-      ZPageAge to_age;
+      const ZPageAge to_age = _forwarding->to_age();
       // Revive an old page and use it as a target, if there are no
       // old pages left to choose from, try allocating a new target page
-      to_age = _forwarding->to_age();
-      to_page = _allocator->revive_and_retire_target_page(_forwarding, target(to_age));
-      set_target(to_age, to_page);
-      if (to_page != nullptr && to_page->type() == ZPageType::small) {
-        continue;
+      if(to_age == ZPageAge::old) {
+        to_page = _allocator->revive_and_retire_target_page(_forwarding, target(to_age));
+        set_target(to_age, to_page);
+        if (to_page != nullptr && to_page->type() == ZPageType::small) {
+          continue;
+        }
       }
 
       // Allocate a new target page, or if that fails, use the page being
       // relocated as the new target, which will cause it to be relocated
       // in-place.
-      to_age = _forwarding->to_age();
       to_page = _allocator->alloc_and_retire_target_page(_forwarding, target(to_age));
       set_target(to_age, to_page);
       if (to_page != nullptr) {
@@ -1365,7 +1353,6 @@ public:
 
       // Setup to-space page
       ZPage* const new_page = promotion ? prev_page->clone_limited_promote_flipped() : prev_page;
-      new_page->reset(to_age, ZPageResetType::FlipAging);
 
       if (promotion) {
         ZGeneration::young()->flip_promote(prev_page, new_page);
@@ -1373,18 +1360,24 @@ public:
         promoted_pages.push(prev_page);
       }
       if(new_page->type() == ZPageType::small && 
-         !(from_age != ZPageAge::old && to_age == ZPageAge::old) && 
+         to_age != ZPageAge::old && 
          new_page->live_objects() > 0 &&
-         new_page->live_bytes() < ZRecycleMaximumLive) {
-        recyclable_pages.push(new_page);
+         new_page->live_bytes() < ZRecycleMaximumLive*new_page->size()) {
+        bool init = new_page->init_free_list();
+        if(init) {
+          recyclable_pages.push(new_page);
+          new_page->reset_recycling_seqnum();
+        }
       }
+
+      new_page->reset(to_age, ZPageResetType::FlipAging);
 
       SuspendibleThreadSet::yield();
     }
 
     ZGeneration::young()->register_flip_promoted(promoted_pages);
     ZGeneration::young()->register_recycled_pages(recyclable_pages);
-    ZGeneration::old()->register_recycled_pages(recyclable_pages);
+    // ZGeneration::old()->register_recycled_pages(recyclable_pages);
   }
 };
 

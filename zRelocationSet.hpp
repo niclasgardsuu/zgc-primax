@@ -66,6 +66,7 @@ public:
   ZPage* get_r_page(ZPageAge age, size_t index);
   void print_all_r_pages();
   void register_recycled_pages(const ZArray<ZPage*>& pages);
+  void reset_recycled_pages();
 };
 
 template <bool Parallel>

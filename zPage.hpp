@@ -94,7 +94,6 @@ private:
 
 public:
   ZPage(ZPageType type, const ZVirtualMemory& vmem, const ZPhysicalMemory& pmem);
-  void break_aaah();
 
   void reset_seqnum();
   void reset_recycling_seqnum();
@@ -230,7 +229,6 @@ public:
   void fatal_msg(const char* msg) const;
 
   bool init_free_list();
-  bool is_valid();
 
   void print_live_addresses();
 };

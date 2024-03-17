@@ -74,8 +74,8 @@
   product(int, ZMinLiveBitDistance, 0, DIAGNOSTIC,"")                      \
           range(0, 262144 /*Small Livemap Size*/)                           \
                                                                             \
-  product(int, ZMinFreeBlockSize, 0, DIAGNOSTIC,"")                        \
-          range(0, 2097152 /*Small Page Size*/)                             \
+  product(int, ZMinFreeBlockSize, 16, DIAGNOSTIC,"")                        \
+          range(16, 2097152 /*Small Page Size*/)                             \
                                                                             \
   product(double, ZRecycleMaximumLive, 1, DIAGNOSTIC,"")                  \
           range(0, 1)                                                       \
