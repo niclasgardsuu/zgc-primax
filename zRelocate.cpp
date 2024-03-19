@@ -427,8 +427,9 @@ static ZPage* revive_page(ZPage* target) {
     return nullptr;
   }
   
-  target->reset_seqnum(); 
-  target->reset_recycling_seqnum(); 
+  // target->reset_seqnum(); 
+  // target->reset_recycling_seqnum(); 
+  target->fill_page();
   return target;
 }
 
@@ -935,9 +936,9 @@ private:
     while (!try_relocate_object(addr)) {
       ZPage* to_page;
       const ZPageAge to_age = _forwarding->to_age();
-      // Revive an old page and use it as a target, if there are no
-      // old pages left to choose from, try allocating a new target page
-      if(to_age == ZPageAge::old) {
+      // Revive an page and use it as a target, if there are no
+      // pages left to choose from, try allocating a new target page
+      if(to_age != ZPageAge::old) {
         to_page = _allocator->revive_and_retire_target_page(_forwarding, target(to_age));
         set_target(to_age, to_page);
         if (to_page != nullptr && to_page->type() == ZPageType::small) {

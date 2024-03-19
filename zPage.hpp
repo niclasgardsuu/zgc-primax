@@ -229,7 +229,7 @@ public:
   void fatal_msg(const char* msg) const;
 
   bool init_free_list();
-
+  void fill_page();
   void print_live_addresses();
 };
 
