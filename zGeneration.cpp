@@ -1525,7 +1525,7 @@ ZGenerationTracer* ZGenerationOld::jfr_tracer() {
 
 ZPage* ZGeneration::get_next_recyclable_page(ZPageAge age) {
   ZPage* r = _relocation_set.get_r_page(age, Atomic::fetch_then_add(&_r_page_index[static_cast<uint>(age)], 1u));
-  log_debug(gc)("GENERATION::GET_NEXT_RECYCLABLE page %p, age %zu, index %zu", (void*)r, (size_t)age, _r_page_index[static_cast<uint>(age)]);
+  // log_debug(gc)("GENERATION::GET_NEXT_RECYCLABLE page %p, age %zu, index %zu", (void*)r, (size_t)age, _r_page_index[static_cast<uint>(age)]);
   if(r != nullptr)
     return r;
   else

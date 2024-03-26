@@ -332,7 +332,7 @@ bool ZPage::init_free_list() {
     _allocator->reset();
   } else {
     // log_debug(gc)("INIT START ASDASASDASDASD%p", (void*)ZOffset::address(start()));
-    _allocator = new AllocatorWrapper<ZinaryBuddyAllocator>((void*)ZOffset::address(start()), size(), 0, true);
+    _allocator = new AllocatorWrapper<ZTLSFAllocator>((void*)ZOffset::address(start()), size(), 0, true);
   }
 
   //Reconstruct the free list from the livemap
@@ -343,7 +343,7 @@ bool ZPage::init_free_list() {
   // const size_t ZMinLiveBitDistance = 8;
   // const size_t ZMinFreeBlockSize = 1024;
   zaddress curr = ZOffset::address(this->start());
-  bool freed = false;
+  bool freed = true;
   auto free_internal_range = [&](BitMap::idx_t idx) -> bool {
     zaddress addr = ZOffset::address(offset_from_bit_index(idx));
     size_t free_size = align_down(addr - curr, object_alignment());
@@ -353,7 +353,7 @@ bool ZPage::init_free_list() {
       _allocator->free_range((void*)curr,free_size);
       freed = true;
       // log_debug(gc)("initadr : %p\ninitsiz : %zu", (void*)curr, free_size);
-      log_debug(gc)("free %d %zu", (int)static_cast<uint>(this->age()), free_size);
+      //log_debug(gc)("free %d %zu", (int)static_cast<uint>(this->age()), free_size);
     }
     curr = addr + ZUtils::object_size(addr);
     return true;
@@ -368,7 +368,7 @@ bool ZPage::init_free_list() {
       assert(curr + final_block_size <= ZOffset::address(to_zoffset(end())), "free_range reaches outside end of page");
       _allocator->free_range((void*)curr, final_block_size);
       // log_debug(gc)("initadr : %p\ninitsiz : %zu", (void*)curr, final_block_size);
-      log_debug(gc)("free %d %zu", (int)static_cast<uint>(this->age()), final_block_size);
+      //log_debug(gc)("free %d %zu", (int)static_cast<uint>(this->age()), final_block_size);
     }
   } else { // No free blocks that satisfy conditions. revert to bump pointer
     delete _allocator;
@@ -415,27 +415,27 @@ zaddress ZPage::alloc_object_free_list(size_t size) {
   //                (void*)start(),
   //                (void*)end(),
   //                size);  
-  const size_t aligned_size = align_up(size, object_alignment());
-  if(this->type() == ZPageType::small) {
-    log_debug(gc)("reloc0 %d %zu", (int)static_cast<uint>(this->age()), aligned_size);
-  }
+  // if(this->type() == ZPageType::small) {
+  //   log_debug(gc)("reloc0 %d %zu", (int)static_cast<uint>(this->age()), aligned_size);
+  // }
   if(_recycling_seqnum != generation()->seqnum() || _allocator == nullptr) {
     return alloc_object(size);
   }
   assert(this->age() != ZPageAge::old, "No recycling of Old pages");
   // assert(false, "yaho");
 
-  log_debug(gc)("reloc1 %d %zu", (int)static_cast<uint>(this->age()), aligned_size);
+  const size_t aligned_size = align_up(size, object_alignment());
+  //log_debug(gc)("reloc1 %d %zu", (int)static_cast<uint>(this->age()), aligned_size);
 
   zaddress addr = to_zaddress((uintptr_t)_allocator->allocate(aligned_size));
   if(is_null(addr)) {
-    log_debug(gc)("failed %d %zu", (int)static_cast<uint>(this->age()), aligned_size);
+    //log_debug(gc)("failed %d %zu", (int)static_cast<uint>(this->age()), aligned_size);
     return zaddress::null;
   }
 
-  if((uintptr_t)_top < ((uintptr_t)0x3ffffffffff & ((uintptr_t)addr+aligned_size))) {
-    // log_debug(gc)("\ntop   : %p\nnewtop: %p", (void*)top(), (void*)to_zoffset_end(ZAddress::offset(addr),aligned_size));
-  }
+  // if((uintptr_t)_top < ((uintptr_t)0x3ffffffffff & ((uintptr_t)addr+aligned_size))) {
+  //   log_debug(gc)("\ntop   : %p\nnewtop: %p", (void*)top(), (void*)to_zoffset_end(ZAddress::offset(addr),aligned_size));
+  // }
 
   // _top = top() > to_zoffset_end(ZAddress::offset(addr),aligned_size) ?
   //   top() :
@@ -447,8 +447,8 @@ zaddress ZPage::alloc_object_free_list(size_t size) {
                  \nthis        : %p \
                  \n----------- \
                  \n", live_objects(), (void*)addr, aligned_size , (void*)_top, (void*)this);
-  if((void*)addr != nullptr) {
-    log_debug(gc)("recycle %d %zu", (int)static_cast<uint>(this->age()), aligned_size);
-  }
+  // if((void*)addr != nullptr) {
+  //   log_debug(gc)("recycle %d %zu", (int)static_cast<uint>(this->age()), aligned_size);
+  // }
   return addr;
 }

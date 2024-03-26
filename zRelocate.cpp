@@ -631,6 +631,7 @@ private:
   Allocator* const   _allocator;
   ZForwarding*       _forwarding;
   ZPage*             _target[ZAllocator::_relocation_allocators];
+  ZPage*             _recycle_target[ZAllocator::_relocation_allocators];
   ZGeneration* const _generation;
   size_t             _other_promoted;
   size_t             _other_compacted;
@@ -641,6 +642,14 @@ private:
 
   void set_target(ZPageAge age, ZPage* page) {
     _target[static_cast<uint>(age) - 1] = page;
+  }
+
+  ZPage* recycle_target(ZPageAge age) {
+    return _recycle_target[static_cast<uint>(age) - 1];
+  }
+
+  void set_recycle_target(ZPageAge age, ZPage* page) {
+    _recycle_target[static_cast<uint>(age) - 1] = page;
   }
 
   size_t object_alignment() const {
@@ -659,9 +668,8 @@ private:
   zaddress try_relocate_object_inner(zaddress from_addr) {
     ZForwardingCursor cursor;
 
-    const size_t size = ZUtils::object_size(from_addr);
-    ZPage* const to_page = target(_forwarding->to_age());
 
+    const size_t size = ZUtils::object_size(from_addr);
 
     // Lookup forwarding
     {
@@ -674,11 +682,25 @@ private:
     }
 
     // Allocate object
-    const zaddress allocated_addr = _allocator->alloc_object(to_page, size);
+    zaddress allocated_addr; 
+    
+    ZPage* to_page = recycle_target(_forwarding->to_age());
+    if(to_page != nullptr && size <= ZMaxRelocationInFreeLists) {
+      //Try to relocate into a free list if the object
+      //is small enough
+      allocated_addr = _allocator->alloc_object(to_page,size);
+    } else {
+      //If no free list available, or the object is
+      //too large, use a new page with bump pointer
+      to_page = target(_forwarding->to_age());
+      allocated_addr = _allocator->alloc_object(to_page, size);
+    }
+  
     if (is_null(allocated_addr)) {
       // Allocation failed
       return zaddress::null;
     }
+
 
     // Copy object. Use conjoint copying if we are relocating
     // in-place and the new object overlaps with the old object.
@@ -930,17 +952,17 @@ private:
   void relocate_object(oop obj) {
     const zaddress addr = to_zaddress(obj);
     assert(ZHeap::heap()->is_object_live(addr), "Should be live");
+    const size_t size = ZUtils::object_size(addr);
 
     while (!try_relocate_object(addr)) {
       ZPage* to_page;
       const ZPageAge to_age = _forwarding->to_age();
       // Revive an page and use it as a target, if there are no
       // pages left to choose from, try allocating a new target page
-      if(to_age != ZPageAge::old) {
+      if(to_age != ZPageAge::old && size <= ZMaxRelocationInFreeLists) {
         to_page = _allocator->revive_and_retire_target_page(_forwarding, target(to_age));
-        set_target(to_age, to_page);
-        if (to_page != nullptr && to_page->type() == ZPageType::small) {
-          assert(to_age == to_page->age(), "Relocation to wrong age");
+        set_recycle_target(to_age, to_page);
+        if (to_page != nullptr) {
           continue;
         }
       }
@@ -967,6 +989,7 @@ public:
     : _allocator(allocator),
       _forwarding(nullptr),
       _target(),
+      _recycle_target(),
       _generation(generation),
       _other_promoted(0),
       _other_compacted(0) {}
@@ -1383,7 +1406,6 @@ public:
 };
 
 void ZRelocate::flip_age_pages(const ZArray<ZPage*>* pages) {
-  assert(pages.length() > 0, "At least one page to be flip aged... right? Right!?");
   ZFlipAgePagesTask flip_age_task(pages);
   workers()->run(&flip_age_task);
 }

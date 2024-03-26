@@ -70,7 +70,7 @@ private:
   uint64_t                              _last_used;
   ZPhysicalMemory                       _physical;
   ZListNode<ZPage>                      _node;
-  AllocatorWrapper<ZinaryBuddyAllocator>* _allocator;
+  AllocatorWrapper<ZTLSFAllocator>* _allocator;
 
 
   ZPageType type_from_size(size_t size) const;

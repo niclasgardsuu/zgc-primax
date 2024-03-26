@@ -92,11 +92,21 @@ void *JSMallocBase<Config>::allocate(size_t size) {
     return nullptr;
   } 
 
+  size_t allocated_size = blk->get_size();
+
+  _internal_fragmentation = allocated_size - size;
+  _allocated += allocated_size;
+
   // Make sure addresses are aligned to the word-size (8-bytes).
   // TODO: This might not be necessary if everything is already aligned, and
   // should take into account that the block size might be smaller than expected.
   uintptr_t blk_start = (uintptr_t)blk + _block_header_length;
   return (void *)blk_start;
+}
+
+template<typename Config>
+double JSMallocBase<Config>::internal_fragmentation() {
+  return (double)_internal_fragmentation / _allocated;
 }
 
 template<typename Config>
@@ -128,7 +138,7 @@ void JSMallocBase<Config>::print_phys_blks() {
 
 template<typename Config>
 void JSMallocBase<Config>::print_free_lists() {
-  for(size_t i = 0; i < 64; i++) {
+  for(size_t i = 0; i < 32; i++) {
     if((_fl_bitmap & (1UL << i)) == 0) {
       continue;
     }
@@ -147,7 +157,6 @@ void JSMallocBase<Config>::print_free_lists() {
         }
         std::cout << "END" << std::endl;
       }
-
     } else {
       printf("FREE-LIST (%02ld): ", i);
       BlockHeader *current = _blocks[i];
@@ -231,8 +240,13 @@ BlockHeader *JSMallocBase<Config>::find_block(size_t size) {
 template<typename Config>
 BlockHeader *JSMallocBase<Config>::coalesce_blocks(BlockHeader *blk1, BlockHeader *blk2) {
   size_t blk2_size = blk2->get_size();
-  remove_block(blk1, get_mapping(blk1->get_size()));
-  remove_block(blk2, get_mapping(blk2_size));
+  if(blk1->is_free()) {
+    remove_block(blk1, get_mapping(blk1->get_size()));
+  }
+
+  if(blk2->is_free()) {
+    remove_block(blk2, get_mapping(blk2_size));
+  }
 
   bool blk2_is_last = blk2->is_last();
 
