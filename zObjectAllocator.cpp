@@ -175,7 +175,7 @@ zaddress ZObjectAllocator::alloc_object_for_relocation(size_t size) {
 
 void ZObjectAllocator::undo_alloc_object_for_relocation(zaddress addr, size_t size) {
   ZPage* const page = ZHeap::heap()->page(addr);
-
+  return;
   if (page->is_large()) {
     undo_alloc_page(page);
     ZStatInc(ZCounterUndoObjectAllocationSucceeded);

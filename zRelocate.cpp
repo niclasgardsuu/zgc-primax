@@ -518,7 +518,6 @@ public:
   }
 
   void undo_alloc_object(ZPage* page, zaddress addr, size_t size) const {
-    log_debug(gc)("HOPPAS INTE DU KOMMER HIT :)");
     page->undo_alloc_object(addr, size);
   }
 
@@ -693,7 +692,6 @@ private:
     const zaddress to_addr = forwarding_insert(_forwarding, from_addr, allocated_addr, &cursor);
     if (to_addr != allocated_addr) {
       // Already relocated, undo allocation
-      log_debug(gc)("UNDA ALLOC OOOHHH OHHHHH");
       _allocator->undo_alloc_object(to_page, to_addr, size);
       increase_other_forwarded(size);
     }
@@ -942,6 +940,7 @@ private:
         to_page = _allocator->revive_and_retire_target_page(_forwarding, target(to_age));
         set_target(to_age, to_page);
         if (to_page != nullptr && to_page->type() == ZPageType::small) {
+          assert(to_age == to_page->age(), "Relocation to wrong age");
           continue;
         }
       }
@@ -1354,24 +1353,25 @@ public:
 
       // Setup to-space page
       ZPage* const new_page = promotion ? prev_page->clone_limited_promote_flipped() : prev_page;
-
-      if (promotion) {
-        ZGeneration::young()->flip_promote(prev_page, new_page);
-        // Defer promoted page registration times the lock is taken
-        promoted_pages.push(prev_page);
-      }
       if(new_page->type() == ZPageType::small && 
          to_age != ZPageAge::old && 
          new_page->live_objects() > 0 &&
          new_page->live_bytes() < ZRecycleMaximumLive*new_page->size()) {
+        new_page->fill_page();
         bool init = new_page->init_free_list();
         if(init) {
           recyclable_pages.push(new_page);
           new_page->reset_recycling_seqnum();
         }
       }
-
       new_page->reset(to_age, ZPageResetType::FlipAging);
+
+      if (promotion) {
+        ZGeneration::young()->flip_promote(prev_page, new_page);
+        // Defer promoted page registration times the lock is taken
+        promoted_pages.push(prev_page);
+      }
+
 
       SuspendibleThreadSet::yield();
     }
@@ -1383,6 +1383,7 @@ public:
 };
 
 void ZRelocate::flip_age_pages(const ZArray<ZPage*>* pages) {
+  assert(pages.length() > 0, "At least one page to be flip aged... right? Right!?");
   ZFlipAgePagesTask flip_age_task(pages);
   workers()->run(&flip_age_task);
 }

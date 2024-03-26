@@ -327,26 +327,12 @@ bool ZPage::init_free_list() {
   assert(this->age() != ZPageAge::old, "Cannot construct free lists in old pages");
   assert(this->type() == ZPageType::small, "Page is not small when constructing free list");
   
-  log_debug(gc)("START INITIALIZING FREE LIST %p",(void*)start());
-  if(_age == ZPageAge::old) {
-    log_debug(gc)("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOLD PAGE FOUND innit");
-    // return false;
-  } else {
-    log_debug(gc)("young");
-  }
   if(_allocator){
     //reset the current allocator, and mark entire page as allocated
     _allocator->reset();
   } else {
-    log_debug(gc)("INIT START ASDASASDASDASD%p", (void*)ZOffset::address(start()));
+    // log_debug(gc)("INIT START ASDASASDASDASD%p", (void*)ZOffset::address(start()));
     _allocator = new AllocatorWrapper<ZinaryBuddyAllocator>((void*)ZOffset::address(start()), size(), 0, true);
-  }
-  
-
-  if(live_objects() <= 0) {
-    log_debug(gc)("WTFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
-    // _top = to_zoffset_end(start());
-    return false;
   }
 
   //Reconstruct the free list from the livemap
@@ -366,7 +352,8 @@ bool ZPage::init_free_list() {
       assert(curr + free_size < ZOffset::address(to_zoffset(this->end())), "free_range reaches outside end of page");
       _allocator->free_range((void*)curr,free_size);
       freed = true;
-      log_debug(gc)("initadr : %p\ninitsiz : %zu", (void*)curr, free_size);
+      // log_debug(gc)("initadr : %p\ninitsiz : %zu", (void*)curr, free_size);
+      log_debug(gc)("free %d %zu", (int)static_cast<uint>(this->age()), free_size);
     }
     curr = addr + ZUtils::object_size(addr);
     return true;
@@ -377,14 +364,18 @@ bool ZPage::init_free_list() {
   if(freed) { // A free block was found in the external fragmentation
     size_t final_block_size = align_down(ZOffset::address(to_zoffset(end()))-curr, object_alignment());
     if(final_block_size >= (long unsigned int)ZMinFreeBlockSize) {
-      // _allocator->free_range((void*)curr, final_block_size);
-      log_debug(gc)("initadr : %p\ninitsiz : %zu", (void*)curr, final_block_size);
+      assert(curr >= ZOffset::address(this->start()), "free_range starts before page start");
+      assert(curr + final_block_size <= ZOffset::address(to_zoffset(end())), "free_range reaches outside end of page");
+      _allocator->free_range((void*)curr, final_block_size);
+      // log_debug(gc)("initadr : %p\ninitsiz : %zu", (void*)curr, final_block_size);
+      log_debug(gc)("free %d %zu", (int)static_cast<uint>(this->age()), final_block_size);
     }
   } else { // No free blocks that satisfy conditions. revert to bump pointer
     delete _allocator;
     _allocator = nullptr;
+    return false;
   }
-  log_debug(gc)("FINISHED FREE LIST INITIALIZATION %p",(void*)start());
+  // log_debug(gc)("FINISHED FREE LIST INITIALIZATION %p",(void*)start());
   return true;
 }
 
@@ -401,12 +392,12 @@ void ZPage::print_live_addresses() {
     const zaddress to_addr = ZOffset::address(offset);
     const size_t size = ZUtils::object_size(to_addr);
 
-    log_debug(gc)("livealocc  : %p\nlivesizze  : %lu", (void*)offset, size);
+    // log_debug(gc)("livealocc  : %p\nlivesizze  : %lu", (void*)offset, size);
     
     return true;
   };
   _livemap.iterate_forced(_generation_id, do_bit);
-  log_debug(gc)("Done Printing Live Addresses");
+  // log_debug(gc)("Done Printing Live Addresses");
 }
 
 void ZPage::fill_page() {
@@ -424,33 +415,40 @@ zaddress ZPage::alloc_object_free_list(size_t size) {
   //                (void*)start(),
   //                (void*)end(),
   //                size);  
-
+  const size_t aligned_size = align_up(size, object_alignment());
+  if(this->type() == ZPageType::small) {
+    log_debug(gc)("reloc0 %d %zu", (int)static_cast<uint>(this->age()), aligned_size);
+  }
   if(_recycling_seqnum != generation()->seqnum() || _allocator == nullptr) {
     return alloc_object(size);
   }
   assert(this->age() != ZPageAge::old, "No recycling of Old pages");
   // assert(false, "yaho");
 
-  const size_t aligned_size = align_up(size, object_alignment());
+  log_debug(gc)("reloc1 %d %zu", (int)static_cast<uint>(this->age()), aligned_size);
 
   zaddress addr = to_zaddress((uintptr_t)_allocator->allocate(aligned_size));
   if(is_null(addr)) {
+    log_debug(gc)("failed %d %zu", (int)static_cast<uint>(this->age()), aligned_size);
     return zaddress::null;
   }
 
   if((uintptr_t)_top < ((uintptr_t)0x3ffffffffff & ((uintptr_t)addr+aligned_size))) {
-    log_debug(gc)("\ntop   : %p\nnewtop: %p", (void*)top(), (void*)to_zoffset_end(ZAddress::offset(addr),aligned_size));
+    // log_debug(gc)("\ntop   : %p\nnewtop: %p", (void*)top(), (void*)to_zoffset_end(ZAddress::offset(addr),aligned_size));
   }
 
   // _top = top() > to_zoffset_end(ZAddress::offset(addr),aligned_size) ?
   //   top() :
   //   to_zoffset_end(ZAddress::offset(addr),aligned_size);
-  log_debug(gc)("\nlive objects: %d \
+  // log_debug(gc)("\nlive objects: %d \
                  \nalloc addr  : %p \
                  \nsize        : %zu \
                  \nnew top     : %p \
                  \nthis        : %p \
                  \n----------- \
                  \n", live_objects(), (void*)addr, aligned_size , (void*)_top, (void*)this);
+  if((void*)addr != nullptr) {
+    log_debug(gc)("recycle %d %zu", (int)static_cast<uint>(this->age()), aligned_size);
+  }
   return addr;
 }

@@ -215,8 +215,8 @@ void ZRelocationSet::register_in_place_relocate_promoted(ZPage* page) {
 }
 
 ZPage* ZRelocationSet::get_r_page(ZPageAge age, size_t index) {
-  if(index < _nrecyclable_pages[static_cast<uint>(age)]) {
-    return _recyclable_pages[static_cast<uint>(age)].at(index);
+  if(index < _nrecyclable_pages[static_cast<uint>(age)-1]) {
+    return _recyclable_pages[static_cast<uint>(age)-1].at(index);
   } else {
     return nullptr;
   }
@@ -232,8 +232,8 @@ void ZRelocationSet::print_all_r_pages() {
 void ZRelocationSet::register_recycled_pages(const ZArray<ZPage*>& pages) {
   ZLocker<ZLock> locker(&_recycling_lock);
   for(ZPage* const page : pages) {
-    _recyclable_pages[static_cast<uint>(page->age())].append(page);
-    _nrecyclable_pages[static_cast<uint>(page->age())]++;
+    _recyclable_pages[static_cast<uint>(page->age())-1].append(page);
+    _nrecyclable_pages[static_cast<uint>(page->age())-1]++;
   }
 }
 

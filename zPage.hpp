@@ -24,7 +24,7 @@
 #ifndef SHARE_GC_Z_ZPAGE_HPP
 #define SHARE_GC_Z_ZPAGE_HPP
 
-#include "gc/z/AAZAllocators.hpp"
+#include "gc/z/ZAllocators.hpp"
 #include "gc/z/AllocatorWrapper.hpp"
 #include "gc/z/zGenerationId.hpp"
 #include "gc/z/zList.hpp"

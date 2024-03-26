@@ -212,22 +212,7 @@ inline void ZPage::set_last_used() {
 }
 
 inline bool ZPage::is_in(zoffset offset) const {
-  bool res = offset >= start() && offset < top();
-  if(!res) {
-    log_debug(gc)("\npage    : %p \
-                   \ntop     : %p \
-                   \nstart   : %p \
-                   \nend     : %p \
-                   \noffset  : %p \
-                   \nres     : %d",
-                   (void*)this,
-                   (void*)top(),
-                   (void*)start(),
-                   (void*)end(),
-                   (void*)offset,
-                   res);
-  }
-  return res;
+  return offset >= start() && offset < top();
 }
 
 inline bool ZPage::is_in(zaddress addr) const {
@@ -522,7 +507,7 @@ inline zaddress ZPage::alloc_object_atomic(size_t size) {
 
 inline bool ZPage::undo_alloc_object(zaddress addr, size_t size) {
   assert(is_allocating(), "Invalid state");
- 
+  return false;
   const zoffset offset = ZAddress::offset(addr);
   const size_t aligned_size = align_up(size, object_alignment());
   const zoffset_end old_top = top();
@@ -541,7 +526,7 @@ inline bool ZPage::undo_alloc_object(zaddress addr, size_t size) {
 
 inline bool ZPage::undo_alloc_object_atomic(zaddress addr, size_t size) {
   assert(is_allocating(), "Invalid state");
-
+  return false;
   const zoffset offset = ZAddress::offset(addr);
   const size_t aligned_size = align_up(size, object_alignment());
   zoffset_end old_top = top();
