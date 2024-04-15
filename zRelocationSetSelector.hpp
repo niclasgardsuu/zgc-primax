@@ -88,6 +88,7 @@ private:
   ZArray<ZPage*>                   _not_selected_pages;
   size_t                           _forwarding_entries;
   ZRelocationSetSelectorGroupStats _stats[ZPageAgeMax + 1];
+  bool _found_age[ZPageAgeMax + 1];
 
   bool is_disabled();
   bool is_selectable();

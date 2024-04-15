@@ -66,9 +66,11 @@ void JSMallocBase<Config>::reset(bool initial_block_allocated) {
     }
   }
   _blocks[_num_lists] = nullptr;
-
   BlockHeader *blk = reinterpret_cast<BlockHeader *>(_block_start);
-  blk->size = _pool_size - _block_header_length;
+  if(!initial_block_allocated)
+  {
+    blk->size = _pool_size - _block_header_length;
+  }
   if(!Config::DeferredCoalescing) {
     blk->prev_phys_block = nullptr;
   }
@@ -101,6 +103,7 @@ void *JSMallocBase<Config>::allocate(size_t size) {
   // TODO: This might not be necessary if everything is already aligned, and
   // should take into account that the block size might be smaller than expected.
   uintptr_t blk_start = (uintptr_t)blk + _block_header_length;
+  
   return (void *)blk_start;
 }
 

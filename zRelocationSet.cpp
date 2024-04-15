@@ -223,10 +223,19 @@ ZPage* ZRelocationSet::get_r_page(ZPageAge age, size_t index) {
 }
 
 void ZRelocationSet::print_all_r_pages() {
-  // ZArrayIterator<ZPage*> r_iter(&_recyclable_small_pages);
-  // for (ZPage* r_page; r_iter.next(&r_page);) {
-  //   log_debug(gc)("r_page: %p",(void*)r_page);
-  // }
+  log_debug(gc)("Recycled Pages:");
+  for (uint i = 0; i <= ZPageAgeMax; ++i) {
+    for(uint j = 0; j < _nrecyclable_pages[i]; ++j) {
+      ZPage* p = _recyclable_pages[i].at(j);
+      log_debug(gc)("%p:   %d / %zu / %zu / %u / %zu", 
+        (void*)p->start(), 
+        p->exhausted(), 
+        p->bytes_freed(), 
+        p->bytes_used(),
+        static_cast<uint>(p->age()),
+        p->failed_relocation_size());
+    }
+  }
 }
 
 void ZRelocationSet::register_recycled_pages(const ZArray<ZPage*>& pages) {

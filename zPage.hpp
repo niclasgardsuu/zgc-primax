@@ -71,7 +71,11 @@ private:
   ZPhysicalMemory                       _physical;
   ZListNode<ZPage>                      _node;
   AllocatorWrapper<ZTLSFAllocator>* _allocator;
-
+  bool                                  _exhausted;
+  size_t                                _bytes_freed;
+  size_t                                _bytes_used;
+  size_t                                _failed_relocation_size;
+  jlong                                 _free_list_time;
 
   ZPageType type_from_size(size_t size) const;
   const char* type_to_string() const;
@@ -96,7 +100,7 @@ public:
   ZPage(ZPageType type, const ZVirtualMemory& vmem, const ZPhysicalMemory& pmem);
 
   void reset_seqnum();
-  void reset_recycling_seqnum();
+  void reset_recycling_seqnum(); // TODO
   ZPage* clone_limited() const;
   ZPage* clone_limited_promote_flipped() const;
 
@@ -231,6 +235,11 @@ public:
   bool init_free_list();
   void fill_page();
   void print_live_addresses();
+  bool exhausted();
+  size_t bytes_freed();
+  size_t bytes_used();
+  size_t failed_relocation_size();
+  jlong get_free_list_time();
 };
 
 class ZPageClosure {

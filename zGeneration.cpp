@@ -933,6 +933,7 @@ void ZGenerationYoung::relocate() {
   _relocate.relocate(&_relocation_set);
 
   // Update statistics
+  _relocation_set.print_all_r_pages();
   stat_heap()->at_relocate_end(_page_allocator->stats(this), should_record_stats());
 }
 

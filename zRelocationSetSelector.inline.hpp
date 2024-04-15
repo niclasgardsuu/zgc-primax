@@ -76,8 +76,15 @@ inline void ZRelocationSetSelectorGroup::register_live_page(ZPage* page) {
 
   // Pre-filter out pages that are guaranteed to not be selected
   if (!page->is_large() && garbage > _page_fragmentation_limit) {
+    // if(_found_age[static_cast<uint>(page->age())] == false) {
+    //   _found_age[static_cast<uint>(page->age())] = true;
+    //   _not_selected_pages.append(page);
+    // } else {
+    //   _live_pages.append(page);
+    // }
     _live_pages.append(page);
   } else if (page->is_young()) {
+    // _found_age[static_cast<uint>(page->age())] = true;
     _not_selected_pages.append(page);
   }
 

@@ -55,7 +55,8 @@ ZRelocationSetSelectorGroup::ZRelocationSetSelectorGroup(const char* name,
     _live_pages(),
     _not_selected_pages(),
     _forwarding_entries(0),
-    _stats() {}
+    _stats(),
+    _found_age() {}
 
 bool ZRelocationSetSelectorGroup::is_disabled() {
   // Medium pages are disabled when their page size is zero
