@@ -658,6 +658,10 @@ private:
   size_t _bytes_freed_bump;
   size_t _bytes_freed_fl;
 
+  jlong _time_relocated_start;
+  jlong _total_time_relocated;
+  size_t _bytes_relocated;
+
   ZPage* target(ZPageAge age) {
     return _target[static_cast<uint>(age) - 1];
   }
@@ -916,8 +920,9 @@ private:
   }
 
   bool try_relocate_object(zaddress from_addr) {
+    _time_relocated_start = os::elapsed_counter();
     const zaddress to_addr = try_relocate_object_inner(from_addr);
-
+    _total_time_relocated += os::elapsed_counter() - _time_relocated_start;
     if (is_null(to_addr)) {
       return false;
     }
@@ -1035,7 +1040,10 @@ public:
       _total_time_free_bump(0),
       _total_time_free_fl(0),
       _bytes_freed_bump(0),
-      _bytes_freed_fl(0) {}
+      _bytes_freed_fl(0),
+      _time_relocated_start(0),
+      _total_time_relocated(0),
+      _bytes_relocated(0) {}
 
   ~ZRelocateWork() {
     for (uint i = 0; i < ZAllocator::_relocation_allocators; ++i) {
@@ -1070,6 +1078,13 @@ public:
   }
   size_t get_bytes_freed_fl() {
     return _bytes_freed_fl;
+  }
+
+  jlong get_time_relocated() {
+    return _total_time_relocated;
+  }
+  size_t get_bytes_relocated() {
+    return _bytes_relocated;
   }
 
   bool active_remset_is_current() const {
@@ -1239,6 +1254,9 @@ public:
   size_t _bytes_freed_bump;
   size_t _bytes_freed_fl;
 
+  jlong _total_time;
+  size_t _total_bytes;
+
   RelocateStats() 
    :_total_time_alloc_bump(0), 
     _total_time_alloc_fl(0), 
@@ -1336,6 +1354,9 @@ public:
       Atomic::add(&(_stats->_bytes_freed_bump), small.get_bytes_freed_bump());
       Atomic::add(&(_stats->_bytes_freed_fl), small.get_bytes_freed_fl());
 
+      Atomic::add(&(_stats->_total_time), small.get_time_relocated());
+      Atomic::add(&(_stats->_total_bytes), small.get_bytes_relocated());
+
       if (!do_forwarding_one_from_iter()) {
         // No more work
         break;
@@ -1425,7 +1446,8 @@ void ZRelocate::relocate(ZRelocationSet* relocation_set) {
     ZRelocateTask relocate_task(relocation_set, &_queue, &stats);
     workers()->run(&relocate_task);
     log_debug(gc)("Stats: %ld / %ld / %zu / %zu", stats._total_time_alloc_bump, stats._total_time_alloc_fl, stats._bytes_bump, stats._bytes_fl);
-    log_debug(gc)("Stats free: %ld / %ld / %zu / %zu", stats._total_time_free_bump, stats._total_time_free_fl, stats._bytes_freed_bump, stats._bytes_freed_fl);
+    log_debug(gc)("Stats Free: %ld / %ld / %zu / %zu", stats._total_time_free_bump, stats._total_time_free_fl, stats._bytes_freed_bump, stats._bytes_freed_fl);
+    log_debug(gc)("Stats Total: %ld / %zu", stats._total_time, stats._total_bytes);
   }
 
   if (relocation_set->generation()->is_young()) {

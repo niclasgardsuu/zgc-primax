@@ -53,7 +53,8 @@ ZPage::ZPage(ZPageType type, const ZVirtualMemory& vmem, const ZPhysicalMemory& 
     _exhausted(false),
     _bytes_freed(0),
     _bytes_used(0),
-    _failed_relocation_size(0) {
+    _failed_relocation_size(0),
+    _free_list_time(0) {
   assert(!_virtual.is_null(), "Should not be null");
   assert(!_physical.is_null(), "Should not be null");
   assert(_virtual.size() == _physical.size(), "Virtual/Physical size mismatch");
