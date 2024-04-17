@@ -169,12 +169,10 @@ void ZPage::reset(ZPageAge age, ZPageResetType type) {
   reset_remembered_set();
   verify_remset_after_reset(prev_age, type);
 
-  if (type != ZPageResetType::InPlaceRelocation || (prev_age != ZPageAge::old && age == ZPageAge::old)) {
+  if (type != ZPageResetType::InPlaceRelocation &&   (prev_age != ZPageAge::old && age == ZPageAge::old)) {
     // Promoted in-place relocations reset the live map,
     // because they clone the page.
-    if(type != ZPageResetType::FlipAging) {
-      _livemap.reset();
-    }
+    _livemap.reset();
   }
 }
 
@@ -345,7 +343,7 @@ bool ZPage::init_free_list() {
     _allocator->reset();
   } else {
     //create a new allocator
-    _allocator = new AllocatorWrapper<ZTLSFAllocator>((void*)ZOffset::address(start()), size(), 0, true);
+    _allocator = new ZAllocatorWrapper((void*)ZOffset::address(start()), size(), 0, true, false);
   }
 
   //Reconstruct the free list from the livemap
@@ -426,9 +424,9 @@ zaddress ZPage::alloc_object_free_list(size_t size) {
     // log_debug(gc)("reloc0 %d %zu", (int)static_cast<uint>(this->age()), aligned_size);
   }
   assert(!(_recycling_seqnum != generation()->seqnum() || _allocator == nullptr), "called free_list without initializing free list");
-  if(_recycling_seqnum != generation()->seqnum() || _allocator == nullptr) {
-    return alloc_object(size);
-  }
+  // if(_recycling_seqnum != generation()->seqnum() || _allocator == nullptr) {
+  //   return alloc_object(size);
+  // }
   assert(this->age() != ZPageAge::old, "No recycling of Old pages");
   // assert(false, "yaho");
 

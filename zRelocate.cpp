@@ -428,8 +428,11 @@ static ZPage* revive_page(ZPage* target) {
   }
   
   // target->reset_seqnum(); 
-  // target->reset_recycling_seqnum(); 
-  target->fill_page();
+  target->reset_recycling_seqnum(); 
+  const bool init = target->init_free_list();
+  if(!init) {
+    return nullptr; // failed to initialize free list
+  }
   return target;
 }
 
@@ -1510,12 +1513,9 @@ public:
          to_age != ZPageAge::old && 
          new_page->live_objects() > 0 &&
          new_page->live_bytes() < ZRecycleMaximumLive*new_page->size()) {
-        new_page->fill_page();
-        bool init = new_page->init_free_list();
-        if(init) {
-          recyclable_pages.push(new_page);
-          new_page->reset_recycling_seqnum();
-        }
+        //This page should now definitely be eligible for a free list
+        new_page->fill_page(); 
+        recyclable_pages.push(new_page);
       }
       new_page->reset(to_age, ZPageResetType::FlipAging);
 

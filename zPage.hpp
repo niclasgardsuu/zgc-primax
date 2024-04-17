@@ -70,7 +70,7 @@ private:
   uint64_t                              _last_used;
   ZPhysicalMemory                       _physical;
   ZListNode<ZPage>                      _node;
-  AllocatorWrapper<ZTLSFAllocator>* _allocator;
+  ZAllocatorWrapper*                    _allocator;
   bool                                  _exhausted;
   size_t                                _bytes_freed;
   size_t                                _bytes_used;
