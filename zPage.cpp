@@ -343,7 +343,7 @@ bool ZPage::init_free_list() {
     _allocator->reset();
   } else {
     //create a new allocator
-    _allocator = new ZAllocatorWrapper((void*)ZOffset::address(start()), size(), 0, true, false);
+    _allocator = new ZAllocatorWrapper((void*)ZOffset::address(start()), size(), 0, true, ZUseBuddyAllocator);
   }
 
   //Reconstruct the free list from the livemap

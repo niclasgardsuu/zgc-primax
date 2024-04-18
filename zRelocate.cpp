@@ -427,12 +427,6 @@ static ZPage* revive_page(ZPage* target) {
     return nullptr;
   }
   
-  // target->reset_seqnum(); 
-  target->reset_recycling_seqnum(); 
-  const bool init = target->init_free_list();
-  if(!init) {
-    return nullptr; // failed to initialize free list
-  }
   return target;
 }
 
@@ -1515,6 +1509,7 @@ public:
          new_page->live_bytes() < ZRecycleMaximumLive*new_page->size()) {
         //This page should now definitely be eligible for a free list
         new_page->fill_page(); 
+        new_page->init_free_list();
         recyclable_pages.push(new_page);
       }
       new_page->reset(to_age, ZPageResetType::FlipAging);

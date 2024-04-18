@@ -67,15 +67,12 @@
   develop(bool, ZVerifyOops, false,                                         \
           "Verify accessed oops")                                           \
                                                                             \
-  develop(bool, ZAllocator, false,                                         \
-          "Choose free list allocator")                                           \
+  product(bool, ZUseBuddyAllocator, false, DIAGNOSTIC,                      \
+          "Choose free list allocator")                                     \
                                                                             \
   product(int, ZTenuringThreshold, -1, DIAGNOSTIC,                          \
           "Young generation tenuring threshold, -1 for dynamic computation")\
           range(-1, static_cast<int>(ZPageAgeMax))                          \
-                                                                            \
-  product(int, ZMinLiveBitDistance, 0, DIAGNOSTIC,"")                       \
-          range(0, 262144 /*Small Livemap Size*/)                           \
                                                                             \
   product(int, ZMinFreeBlockSize, 16, DIAGNOSTIC,"")                        \
           range(16, 2097152 /*Small Page Size*/)                            \
