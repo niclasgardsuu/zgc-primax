@@ -1539,6 +1539,17 @@ void ZGeneration::print_all_r_pages() {
 
 void ZGeneration::register_recycled_pages(const ZArray<ZPage*>& pages) {
   _relocation_set.register_recycled_pages(pages);
-  //statistics
+}
 
+void ZGeneration::add_stats(ZPage* page) {
+  _r_page_total_bytes += page->bytes_freed();
+  _r_page_total_time += page->get_free_list_time();
+}
+
+size_t ZGeneration::get_recycled_bytes() {
+  return _r_page_total_bytes;
+}
+
+jlong ZGeneration::get_total_recycled_time() {
+  return _r_page_total_time;
 }

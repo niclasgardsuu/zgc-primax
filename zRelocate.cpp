@@ -641,23 +641,10 @@ private:
   size_t             _other_promoted;
   size_t             _other_compacted;
 
-  jlong _time_alloc_bump;
-  jlong _time_alloc_fl;
   jlong _total_time_alloc_bump;
   jlong _total_time_alloc_fl;
   size_t _bytes_bump;
   size_t _bytes_fl;
-
-  jlong _time_free_bump;
-  jlong _time_free_fl;
-  jlong _total_time_free_bump;
-  jlong _total_time_free_fl;
-  size_t _bytes_freed_bump;
-  size_t _bytes_freed_fl;
-
-  jlong _time_relocated_start;
-  jlong _total_time_relocated;
-  size_t _bytes_relocated;
 
   ZPage* target(ZPageAge age) {
     return _target[static_cast<uint>(age) - 1];
@@ -711,18 +698,12 @@ private:
     if(to_page != nullptr && size <= ZMaxRelocationInFreeLists) {
       //Try to relocate into a free list if the object
       //is small enough
-      _time_alloc_fl = os::elapsed_counter();
       allocated_addr = _allocator->alloc_object_free_list(to_page,size);
-      _total_time_alloc_fl += os::elapsed_counter() - _time_alloc_fl;
-      _bytes_fl += size;
     } else {
       //If no free list available, or the object is
       //too large, use a new page with bump pointer
       to_page = target(_forwarding->to_age());
-      _time_alloc_bump = os::elapsed_counter();
       allocated_addr = _allocator->alloc_object(to_page, size);
-      _total_time_alloc_bump += os::elapsed_counter() - _time_alloc_bump;
-      _bytes_bump += size;
     }
   
     if (is_null(allocated_addr)) {
@@ -917,9 +898,7 @@ private:
   }
 
   bool try_relocate_object(zaddress from_addr) {
-    _time_relocated_start = os::elapsed_counter();
     const zaddress to_addr = try_relocate_object_inner(from_addr);
-    _total_time_relocated += os::elapsed_counter() - _time_relocated_start;
     if (is_null(to_addr)) {
       return false;
     }
@@ -993,8 +972,6 @@ private:
         to_page = _allocator->revive_and_retire_target_page(_forwarding, target(to_age));
         set_recycle_target(to_age, to_page);
         if (to_page != nullptr) {
-          _total_time_free_fl += to_page->get_free_list_time(); //TODO kanske acutally measurea runt "revive" anropet
-          _bytes_freed_fl += to_page->bytes_freed();
           continue;
         }
       }
@@ -1002,10 +979,7 @@ private:
       // Allocate a new target page, or if that fails, use the page being
       // relocated as the new target, which will cause it to be relocated
       // in-place.
-      _time_free_bump = os::elapsed_counter();
       to_page = _allocator->alloc_and_retire_target_page(_forwarding, target(to_age));
-      _total_time_free_bump += os::elapsed_counter() - _time_free_bump;
-      _bytes_freed_bump += 2097152;
       set_target(to_age, to_page);
       if (to_page != nullptr) {
         continue;
@@ -1028,19 +1002,14 @@ public:
       _generation(generation),
       _other_promoted(0),
       _other_compacted(0),
-      _time_alloc_bump(0),
-      _time_alloc_fl(0),
       _total_time_alloc_bump(0),
       _total_time_alloc_fl(0),
       _bytes_bump(0),
-      _bytes_fl(0),
-      _total_time_free_bump(0),
-      _total_time_free_fl(0),
-      _bytes_freed_bump(0),
-      _bytes_freed_fl(0),
-      _time_relocated_start(0),
-      _total_time_relocated(0),
-      _bytes_relocated(0) {}
+      _bytes_fl(0) {
+        for(int i = 0; i < 15; i++) {
+          _recycle_target[i] = nullptr;
+        }
+      }
 
   ~ZRelocateWork() {
     for (uint i = 0; i < ZAllocator::_relocation_allocators; ++i) {
@@ -1062,26 +1031,6 @@ public:
   }
   size_t get_bytes_fl() {
     return _bytes_fl;
-  }
-
-  jlong get_total_time_free_bump() {
-    return _total_time_free_bump;
-  }
-  jlong get_total_time_free_fl() {
-    return _total_time_free_fl;
-  }
-  size_t get_bytes_freed_bump() {
-    return _bytes_freed_bump;
-  }
-  size_t get_bytes_freed_fl() {
-    return _bytes_freed_fl;
-  }
-
-  jlong get_time_relocated() {
-    return _total_time_relocated;
-  }
-  size_t get_bytes_relocated() {
-    return _bytes_relocated;
   }
 
   bool active_remset_is_current() const {
@@ -1152,11 +1101,26 @@ public:
     _forwarding = forwarding;
 
     _forwarding->page()->log_msg(" (relocate page)");
+    ZPageAge to_age = _forwarding->to_age();
 
     ZVerify::before_relocation(_forwarding);
 
+    auto func = [&](oop obj) {
+      size_t size = ZUtils::object_size(to_zaddress(obj));
+      jlong start = os::elapsed_counter();
+      relocate_object(obj);
+      jlong end = os::elapsed_counter();
+      if(_recycle_target[static_cast<uint>(to_age)] != nullptr) {
+        _total_time_alloc_fl += end - start;
+        _bytes_fl += size;
+      } else {
+        _total_time_alloc_bump += end - start;
+        _bytes_bump += size;
+      }
+    };
+
     // Relocate objects
-    _forwarding->object_iterate([&](oop obj) { relocate_object(obj); });
+    _forwarding->object_iterate(func);
 
     ZVerify::after_relocation(_forwarding);
 
@@ -1246,23 +1210,11 @@ public:
   size_t _bytes_bump;
   size_t _bytes_fl;
 
-  jlong _total_time_free_bump;
-  jlong _total_time_free_fl;
-  size_t _bytes_freed_bump;
-  size_t _bytes_freed_fl;
-
-  jlong _total_time;
-  size_t _total_bytes;
-
   RelocateStats() 
    :_total_time_alloc_bump(0), 
     _total_time_alloc_fl(0), 
     _bytes_bump(0), 
-    _bytes_fl(0),
-    _total_time_free_bump(0),
-    _total_time_free_fl(0),
-    _bytes_freed_bump(0),
-    _bytes_freed_fl(0) {}
+    _bytes_fl(0) {}
 
   ~RelocateStats() {}
 };
@@ -1341,18 +1293,6 @@ public:
       for (ZForwarding* forwarding; (forwarding = _queue->synchronize_poll()) != nullptr;) {
         do_forwarding(forwarding);
       }
-      Atomic::add(&(_stats->_total_time_alloc_bump), small.get_total_time_bump());
-      Atomic::add(&(_stats->_total_time_alloc_fl), small.get_total_time_fl());
-      Atomic::add(&(_stats->_bytes_bump), small.get_bytes_bump());
-      Atomic::add(&(_stats->_bytes_fl), small.get_bytes_fl());
-
-      Atomic::add(&(_stats->_total_time_free_bump), small.get_total_time_free_bump());
-      Atomic::add(&(_stats->_total_time_free_fl), small.get_total_time_free_fl());
-      Atomic::add(&(_stats->_bytes_freed_bump), small.get_bytes_freed_bump());
-      Atomic::add(&(_stats->_bytes_freed_fl), small.get_bytes_freed_fl());
-
-      Atomic::add(&(_stats->_total_time), small.get_time_relocated());
-      Atomic::add(&(_stats->_total_bytes), small.get_bytes_relocated());
 
       if (!do_forwarding_one_from_iter()) {
         // No more work
@@ -1363,6 +1303,10 @@ public:
         break;
       }
     }
+    Atomic::add(&_stats->_total_time_alloc_bump, small.get_total_time_bump());
+    Atomic::add(&_stats->_total_time_alloc_fl, small.get_total_time_fl());
+    Atomic::add(&_stats->_bytes_bump, small.get_bytes_bump());
+    Atomic::add(&_stats->_bytes_fl, small.get_bytes_fl());
 
     _queue->leave();
   }
@@ -1443,8 +1387,7 @@ void ZRelocate::relocate(ZRelocationSet* relocation_set) {
     ZRelocateTask relocate_task(relocation_set, &_queue, &stats);
     workers()->run(&relocate_task);
     log_debug(gc)("Stats: %ld / %ld / %zu / %zu", stats._total_time_alloc_bump, stats._total_time_alloc_fl, stats._bytes_bump, stats._bytes_fl);
-    log_debug(gc)("Stats Free: %ld / %ld / %zu / %zu", stats._total_time_free_bump, stats._total_time_free_fl, stats._bytes_freed_bump, stats._bytes_freed_fl);
-    log_debug(gc)("Stats Total: %ld / %zu", stats._total_time, stats._total_bytes);
+    log_debug(gc)("Stats Free: %ld / %zu", _generation->get_total_recycled_time(), _generation->get_recycled_bytes());
   }
 
   if (relocation_set->generation()->is_young()) {
@@ -1504,9 +1447,9 @@ public:
       // Setup to-space page
       ZPage* const new_page = promotion ? prev_page->clone_limited_promote_flipped() : prev_page;
       if(new_page->type() == ZPageType::small && 
-         to_age != ZPageAge::old && 
-         new_page->live_objects() > 0 &&
-         new_page->live_bytes() < ZRecycleMaximumLive*new_page->size()) {
+          to_age != ZPageAge::old && 
+          new_page->live_objects() > 0 &&
+          new_page->live_bytes() < ZRecycleMaximumLive*new_page->size()) {
         //This page should now definitely be eligible for a free list
         new_page->fill_page(); 
         new_page->init_free_list();

@@ -70,6 +70,8 @@ protected:
   ZRelocate             _relocate;
   ZRelocationSet        _relocation_set;
   size_t                _r_page_index[ZPageAgeMax + 1];
+  size_t                _r_page_total_bytes;
+  jlong                 _r_page_total_time;
 
   volatile size_t       _freed;
   volatile size_t       _promoted;
@@ -177,6 +179,9 @@ public:
   ZPage* get_next_recyclable_page(ZPageAge age);
   void print_all_r_pages();
   void register_recycled_pages(const ZArray<ZPage*>& pages);
+  void add_stats(ZPage* page);
+  size_t get_recycled_bytes();
+  jlong get_total_recycled_time();
 };
 
 enum class ZYoungType {

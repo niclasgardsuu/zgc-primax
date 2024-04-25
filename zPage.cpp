@@ -169,7 +169,7 @@ void ZPage::reset(ZPageAge age, ZPageResetType type) {
   reset_remembered_set();
   verify_remset_after_reset(prev_age, type);
 
-  if (type != ZPageResetType::InPlaceRelocation &&   (prev_age != ZPageAge::old && age == ZPageAge::old)) {
+  if (type != ZPageResetType::InPlaceRelocation || (prev_age != ZPageAge::old && age == ZPageAge::old)) {
     // Promoted in-place relocations reset the live map,
     // because they clone the page.
     _livemap.reset();
@@ -423,7 +423,7 @@ zaddress ZPage::alloc_object_free_list(size_t size) {
   if(this->type() == ZPageType::small) {
     // log_debug(gc)("reloc0 %d %zu", (int)static_cast<uint>(this->age()), aligned_size);
   }
-  assert(!(_recycling_seqnum != generation()->seqnum() || _allocator == nullptr), "called free_list without initializing free list");
+  assert(_allocator != nullptr, "called free_list without initializing free list");
   // if(_recycling_seqnum != generation()->seqnum() || _allocator == nullptr) {
   //   return alloc_object(size);
   // }

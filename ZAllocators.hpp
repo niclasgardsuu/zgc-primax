@@ -3,7 +3,8 @@
 
 #include "gc/z/JSMalloc.hpp"
 // #include "gc/z/ibuddy.hpp"
-#include "gc/z/bbuddy.hpp"
+#include "gc/z/btbuddy.hpp"
+// #include "gc/z/bbuddy.hpp"
 #include "gc/z/buddy_config.hpp"
 
 // class ZBuddyAllocator : public IBuddyAllocator<ZConfig> {
@@ -19,10 +20,10 @@
 //   void aggregate() {empty_lazy_list();}
 // };
 
-class ZinaryBuddyAllocator : public BinaryBuddyAllocator<ZConfig> {
+class ZinaryBuddyAllocator : public BTBuddyAllocator<ZConfig> {
 public:
   ZinaryBuddyAllocator(void* start, size_t size, int lazyThreshold, bool startFull) 
-    : BinaryBuddyAllocator(start, lazyThreshold, startFull) {} 
+    : BTBuddyAllocator(start, lazyThreshold, startFull) {} 
 
   void reset() {fill();}
   // void* allocate(size_t size) {return allocate(size);} already exists in super class

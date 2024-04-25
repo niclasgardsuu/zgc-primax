@@ -243,6 +243,7 @@ void ZRelocationSet::register_recycled_pages(const ZArray<ZPage*>& pages) {
   for(ZPage* const page : pages) {
     _recyclable_pages[static_cast<uint>(page->age())-1].append(page);
     _nrecyclable_pages[static_cast<uint>(page->age())-1]++;
+    _generation->add_stats(page);
   }
 }
 
